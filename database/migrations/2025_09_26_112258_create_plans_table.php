@@ -17,8 +17,7 @@ return new class extends Migration
             $table->string('type');
             $table->decimal('price');
             $table->decimal('profit');
-            $table->timestamp('activated_at')->nullable();
-            $table->timestamp('lock_until');
+            $table->date('lock_until');
 
             $table->boolean('disabled')->default(false);
 
