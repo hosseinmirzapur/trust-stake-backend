@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\DepositRequest;
+use App\Http\Requests\WithdrawRequest;
 use App\Services\WalletService;
-use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 
 class WalletController extends Controller
 {
@@ -11,18 +13,30 @@ class WalletController extends Controller
     {
     }
 
-    public function balance()
+    /**
+     * @return JsonResponse
+     */
+    public function balance(): JsonResponse
     {
-        // todo
+        return response()->json(
+            $this->walletService->balance()
+        );
     }
 
-    public function deposit()
+    public function deposit(DepositRequest $request): JsonResponse
     {
-        // todo
+        $data = $request->validated();
+        return response()->json(
+            $this->walletService->deposit($data)
+        );
     }
 
-    public function withdraw()
+    public function withdraw(WithdrawRequest $request): JsonResponse
     {
-        // todo
+        $data = $request->validated();
+
+        return response()->json(
+            $this->walletService->withdraw($data)
+        );
     }
 }

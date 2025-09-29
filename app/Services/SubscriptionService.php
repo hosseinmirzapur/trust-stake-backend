@@ -47,7 +47,7 @@ class SubscriptionService
         $wallet = $user->wallet;
         abort_if(!$wallet, 400, 'Wallet has not been initialized yet.');
 
-        if ($wallet->spendable_balance < $plan->price) {
+        if ($wallet->spendableBalance() < $plan->price) {
             abort(422, 'Balance not enough');
         }
 

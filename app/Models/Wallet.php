@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * @property int|float $spendable_balance
  * @property int $id
  * @property string $currency
  * @property int|float $balance
@@ -16,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Wallet extends Model
 {
+
     /**
      * @return BelongsTo
      */
@@ -35,7 +35,7 @@ class Wallet extends Model
     /**
      * @return int|float
      */
-    public function getSpendableBalanceAttribute(): int|float
+    public function spendableBalance(): int|float
     {
         $pendingWalletTransactionsAmount = Transaction::query()
             ->where('wallet_id', $this->id)
