@@ -17,7 +17,7 @@ return new class extends Migration
             $table->foreignId('plan_id')->constrained()->cascadeOnDelete();
             $table->date('start_date');
             $table->date('end_date');
-            $table->string('status');
+            $table->string('status')->default('active');
 
             $table->timestamps();
         });

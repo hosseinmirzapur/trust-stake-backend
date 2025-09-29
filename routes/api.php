@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\PlanController;
+use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\TicketController;
 use App\Http\Controllers\WalletController;
 use Illuminate\Support\Facades\Route;
 
@@ -19,3 +22,20 @@ Route::prefix('wallet')->group(function () {
     Route::post('/deposit', [WalletController::class, 'deposit']);
     Route::post('/withdraw', [WalletController::class, 'withdraw']);
 });
+
+# Plans and Subscription
+Route::middleware('auth:sanctum')->get('/plans', [PlanController::class, 'index']);
+Route::middleware('auth:sanctum')->prefix('subscriptions')->group(function () {
+    Route::post('/buy/{plan_id}', [SubscriptionController::class, 'buy']);
+    Route::get('/my', [SubscriptionController::class, 'my']);
+});
+
+# Tickets
+Route::middleware('auth:sanctum')->prefix('tickets')->group(function () {
+    Route::get('/', [TicketController::class, 'index']);
+    Route::post('/', [TicketController::class, 'store']);
+    Route::post('/{ticket_id}/reply', [TicketController::class, 'reply']);
+});
+
+# Referrals
+// todo
