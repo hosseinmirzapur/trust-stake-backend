@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\User;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -18,8 +19,9 @@ return new class extends Migration
             $table->string('mobile')->nullable()->unique();
             $table->string('email')->nullable()->unique();
             $table->string('twoFactorKey')->nullable();
-            $table->string('referral_code')->index();
-            $table->string('role')->index();
+            $table->string('referral_code')->index()->default(User::generateReferralCode());
+            $table->string('role')->index()->default(User::ROLE_USER);
+            $table->string('password')->nullable();
             // email verified at
             $table->datetime('email_verified_at')->nullable();
             $table->datetime('mobile_verified_at')->nullable();

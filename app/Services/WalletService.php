@@ -30,6 +30,8 @@ class WalletService
 
         // TODO: generate a pending transaction, before sending back the URL
 
+        // TODO: Dispatch a job to update the balance and send email to user, when the transaction was finalized
+
         return [
             'url' => $url,
         ];
@@ -45,6 +47,7 @@ class WalletService
         // TODO: Send request to OxaPay API for withdraw
         // TODO: Create a pending transaction
         // TODO: Return transaction, tx_hash, ...
+        // TODO: Dispatch a job to update balance and send email to user when the transaction was finalized
 
         return [
             'transaction' => null
