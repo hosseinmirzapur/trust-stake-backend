@@ -7,6 +7,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Ticket extends Model
 {
+    const STATUS_PENDING = 'pending';
+    CONST STATUS_WAITING_FOR_RESPONSE = 'waiting_for_response';
+    CONST STATUS_CLOSED = 'closed';
+
+
     /**
      * @return BelongsTo
      */
