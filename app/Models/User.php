@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -17,10 +18,11 @@ use Laravel\Sanctum\HasApiTokens;
  * @property Collection<Ticket> $tickets
  * @property string $role
  * @property string $password
+ * @property int $id
  */
 class User extends Authenticatable implements FilamentUser
 {
-    use HasApiTokens, Notifiable;
+    use HasApiTokens, Notifiable, HasFactory;
 
     const ROLE_USER = 'user';
     const ROLE_ADMIN = 'admin';

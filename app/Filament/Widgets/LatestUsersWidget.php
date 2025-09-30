@@ -6,14 +6,15 @@ use App\Models\User;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
+use Illuminate\Database\Eloquent\Builder;
 
 class LatestUsersWidget extends BaseWidget
 {
-    protected static ?string $heading = 'Latest Users'; // This will be translated in the lang file
+    protected static ?string $heading = 'جدیدترین کاربران';
 
     protected static ?int $sort = 2;
 
-    protected function getTableQuery(): \Illuminate\Database\Eloquent\Builder
+    protected function getTableQuery(): Builder
     {
         return User::query()->latest()->limit(5);
     }

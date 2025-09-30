@@ -20,7 +20,7 @@ return new class extends Migration
             $table->longText('message');
             $table->string('image')->nullable();
             $table->string('status')->default(Ticket::STATUS_PENDING);
-            $table->foreignId('ticket_id')->constrained('tickets')->cascadeOnDelete();
+            $table->foreignId('ticket_id')->nullable()->constrained('tickets')->cascadeOnDelete();
             $table->timestamps();
         });
     }
