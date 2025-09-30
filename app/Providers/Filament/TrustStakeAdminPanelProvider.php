@@ -2,6 +2,10 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Widgets\LatestTransactionsWidget;
+use App\Filament\Widgets\LatestUsersWidget;
+use App\Filament\Widgets\TrustStakeStatsOverview;
+use BezhanSalleh\LanguageSwitch\LanguageSwitch;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -20,6 +24,7 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+//use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 
 class TrustStakeAdminPanelProvider extends PanelProvider
 {
@@ -33,6 +38,13 @@ class TrustStakeAdminPanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Indigo,
             ])
+            ->brandName('Trust Stake')
+            ->favicon(asset('favicon.ico'))
+            ->profile()
+            ->databaseNotifications()
+            ->databaseNotificationsPolling('30s')
+            ->sidebarFullyCollapsibleOnDesktop()
+            ->font('Vazirmatn')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([
@@ -40,7 +52,9 @@ class TrustStakeAdminPanelProvider extends PanelProvider
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
-                AccountWidget::class,
+                TrustStakeStatsOverview::class,
+                LatestUsersWidget::class,
+                LatestTransactionsWidget::class,
             ])
             ->middleware([
                 EncryptCookies::class,
@@ -56,5 +70,9 @@ class TrustStakeAdminPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
             ]);
+//            ->plugins([
+//                FilamentShieldPlugin::make(),
+//                LanguageSwitch::make()->locales(['en', 'fa']),
+//            ]);
     }
 }

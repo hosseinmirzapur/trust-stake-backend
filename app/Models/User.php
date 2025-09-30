@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -13,8 +15,10 @@ use Laravel\Sanctum\HasApiTokens;
 /**
  * @property Wallet $wallet
  * @property Collection<Ticket> $tickets
+ * @property string $role
+ * @property string $password
  */
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser
 {
     use HasApiTokens, Notifiable;
 
@@ -32,6 +36,11 @@ class User extends Authenticatable
         'password',
         'remember_token',
     ];
+
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return $this->role === 'admin' && !is_null($this->password);
+    }
 
     /**
      * @return HasOne

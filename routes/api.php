@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\TicketController;
@@ -37,5 +38,10 @@ Route::middleware('auth:sanctum')->prefix('tickets')->group(function () {
     Route::post('/{ticket_id}/reply', [TicketController::class, 'reply']);
 });
 
-# Referrals
-// todo
+
+# Payment Callbacks
+Route::prefix('payment')->group(function () {
+    Route::post('/callback', [PaymentController::class, 'handlePaymentCallback']);
+    Route::post('/withdrawal/callback', [PaymentController::class, 'handleWithdrawalCallback']);
+    Route::get('/success', [PaymentController::class, 'paymentSuccess']);
+});

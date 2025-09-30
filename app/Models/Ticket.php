@@ -11,6 +11,7 @@ class Ticket extends Model
     CONST STATUS_WAITING_FOR_RESPONSE = 'waiting_for_response';
     CONST STATUS_CLOSED = 'closed';
 
+    protected $guarded = [];
 
     /**
      * @return BelongsTo
@@ -18,5 +19,13 @@ class Ticket extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * @return BelongsTo
+     */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(Ticket::class, 'ticket_id');
     }
 }

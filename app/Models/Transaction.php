@@ -21,10 +21,16 @@ class Transaction extends Model
 
     const TYPE_PAYMENT = 'payment';
 
+    protected $guarded = [];
 
     public function wallet(): BelongsTo
     {
         return $this->belongsTo(Wallet::class);
+    }
+
+    public function user(): \Illuminate\Database\Eloquent\Relations\HasOneThrough
+    {
+        return $this->hasOneThrough(User::class, Wallet::class, 'id', 'id', 'wallet_id', 'user_id');
     }
 
     /**

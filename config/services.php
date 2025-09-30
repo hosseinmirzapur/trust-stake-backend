@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'oxapay' => [
+        'api_key' => env('OXAPAY_API_KEY'),
+        'base_url' => env('OXAPAY_BASE_URL', 'https://api.oxapay.com/v1'),
+        'sandbox' => env('OXAPAY_SANDBOX', false),
+    ],
+
 ];
