@@ -2,14 +2,18 @@
 
 namespace App\Services;
 
+use App\Mail\OtpMail;
 use App\Models\User;
+use App\Services\WhatsAppService;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Random\RandomException;
 
 class AuthService
 {
-    const REMEMBER_TTL = 300; // seconds
+    private const REMEMBER_TTL = 300; // seconds
 
     /**
      * @param array $data
@@ -37,7 +41,9 @@ class AuthService
         $otpCode = random_int(100000, 999999);
 
         Cache::put("sign-in-token-$user->id", $otpCode, AuthService::REMEMBER_TTL);
-        // send_email_with_otp()
+
+        $this->sendEmailWithOtp($user->email, $otpCode);
+
         return [
             'code' => $otpCode,
         ];
@@ -51,17 +57,93 @@ class AuthService
         $user = User::query()->where('mobile', $mobile)->first();
         abort_if(!$user, 404, 'No user with these credentials were found.');
 
-
-        // send OTP via Whatsapp
+        // Generate and send OTP via WhatsApp
         $otpCode = random_int(100000, 999999);
-        // send_otp_to_whatsapp()
+        $whatsappResult = $this->sendOtpToWhatsapp($user->mobile, $otpCode);
+
+        // If WhatsApp sending fails, we still proceed but log the issue
+        // In production, you might want to fallback to email or SMS
+        if (!$whatsappResult['success']) {
+            Log::warning('WhatsApp OTP failed, but proceeding with login', [
+                'mobile' => $mobile,
+                'error' => $whatsappResult['error'] ?? 'Unknown error'
+            ]);
+            // You could implement a fallback mechanism here
+            // For now, we'll still cache the OTP and return it
+        }
 
         Cache::put("sign-in-token-$user->id", $otpCode, AuthService::REMEMBER_TTL);
 
-        // in production the code should not be returned
+        // In production the code should not be returned
         return [
             'code' => $otpCode,
+            'whatsapp_sent' => $whatsappResult['success'] ?? false,
         ];
+    }
+
+    /**
+     * Send OTP via email using Mailtrap
+     */
+    private function sendEmailWithOtp(string $email, string $otpCode): void
+    {
+        try {
+            Mail::to($email)->send(new OtpMail($otpCode, $email));
+        } catch (\Exception $e) {
+            // Log the error but don't fail the request
+            \Log::error('Failed to send OTP email: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Send OTP via WhatsApp API using WhatsApp Plus API
+     */
+    private function sendOtpToWhatsapp(string $mobile, string $otpCode): array
+    {
+        try {
+            $whatsappService = new WhatsAppService();
+
+            // Initialize session if needed
+            $initResult = $whatsappService->initializeSession();
+            if (!$initResult['success']) {
+                Log::error('WhatsApp session initialization failed', [
+                    'mobile' => $mobile,
+                    'error' => $initResult
+                ]);
+                return [
+                    'success' => false,
+                    'error' => 'WhatsApp service not available'
+                ];
+            }
+
+            // Send OTP via WhatsApp
+            $result = $whatsappService->sendOtp($mobile, $otpCode);
+
+            if ($result['success']) {
+                Log::info('WhatsApp OTP sent successfully', [
+                    'mobile' => $mobile,
+                    'otp_length' => strlen($otpCode)
+                ]);
+            } else {
+                Log::error('WhatsApp OTP sending failed', [
+                    'mobile' => $mobile,
+                    'error' => $result
+                ]);
+            }
+
+            return $result;
+        } catch (\Exception $e) {
+            Log::error('Exception while sending WhatsApp OTP', [
+                'mobile' => $mobile,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Exception occurred while sending OTP',
+                'details' => $e->getMessage()
+            ];
+        }
     }
 
     public function signup(array $data): array

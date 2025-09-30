@@ -41,4 +41,10 @@ return [
         'sandbox' => env('OXAPAY_SANDBOX', false),
     ],
 
+    'whatsapp' => [
+        'api_key' => env('WHATSAPP_API_KEY'),
+        'api_url' => env('WHATSAPP_API_URL', 'https://api.whatsapp-plus.com'),
+        'session_id' => env('WHATSAPP_SESSION_ID', 'truststake-session'),
+    ],
+
 ];
