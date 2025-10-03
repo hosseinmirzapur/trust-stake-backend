@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\SubscriptionController;
@@ -44,4 +45,14 @@ Route::prefix('payment')->group(function () {
     Route::post('/callback', [PaymentController::class, 'handlePaymentCallback']);
     Route::post('/withdrawal/callback', [PaymentController::class, 'handleWithdrawalCallback']);
     Route::get('/success', [PaymentController::class, 'paymentSuccess']);
+});
+
+# Dashboard
+Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
+    Route::post('profile/modify', [DashboardController::class, 'modifyProfile']);
+    Route::post('profile/send-email-verification-code', [DashboardController::class, 'sendEmailVerificationCode']);
+    Route::post('profile/verify-email', [DashboardController::class, 'verifyEmail']);
+    Route::post('2fa/activate', [DashboardController::class, 'activate2FA']);
+    Route::post('2fa/verify', [DashboardController::class, 'verify2FA']);
+    Route::get('referral', [DashboardController::class, 'referral']);
 });

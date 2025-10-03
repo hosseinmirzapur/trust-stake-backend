@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Exception;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,6 +13,10 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
+use PragmaRX\Google2FA\Exceptions\IncompatibleWithGoogleAuthenticatorException;
+use PragmaRX\Google2FA\Exceptions\InvalidCharactersException;
+use PragmaRX\Google2FA\Exceptions\SecretKeyTooShortException;
+use PragmaRX\Google2FA\Google2FA;
 
 /**
  * @property Wallet $wallet
@@ -19,6 +24,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property string $role
  * @property string $password
  * @property int $id
+ * @property string|null $email
  */
 class User extends Authenticatable implements FilamentUser
 {
@@ -79,5 +85,35 @@ class User extends Authenticatable implements FilamentUser
     public static function generateReferralCode(): string
     {
         return Str::lower(Str::random(6));
+    }
+
+    /**
+     * @return array
+     * @throws IncompatibleWithGoogleAuthenticatorException
+     * @throws InvalidCharactersException
+     * @throws SecretKeyTooShortException
+     * @throws Exception
+     */
+    public function generate2FASecret(): array
+    {
+        if (!$this->email) {
+            throw new Exception('User has no email specified.');
+        }
+        $google2fa = new Google2FA();
+        $secret = $google2fa->generateSecretKey();
+        $this->update([
+            'twoFactorKey' => $secret,
+        ]);
+
+        $qrCodeUrl = $google2fa->getQRCodeUrl(
+            'TrustStake',
+            $this->email,
+            $secret
+        );
+
+        return [
+            'secret' => $secret,
+            'qrCodeUrl' => $qrCodeUrl,
+        ];
     }
 }
