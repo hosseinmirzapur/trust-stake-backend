@@ -4,9 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Support\Facades\Hash;
 use Random\RandomException;
 
+/**
+ * @property string|null $network
+ */
 class Transaction extends Model
 {
     const PAYMENT_GATEWAY = 'paymentGateway';
@@ -28,7 +32,7 @@ class Transaction extends Model
         return $this->belongsTo(Wallet::class);
     }
 
-    public function user(): \Illuminate\Database\Eloquent\Relations\HasOneThrough
+    public function user(): HasOneThrough
     {
         return $this->hasOneThrough(User::class, Wallet::class, 'id', 'id', 'wallet_id', 'user_id');
     }

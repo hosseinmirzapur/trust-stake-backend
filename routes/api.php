@@ -37,6 +37,7 @@ Route::middleware('auth:sanctum')->prefix('tickets')->group(function () {
     Route::get('/', [TicketController::class, 'index']);
     Route::post('/', [TicketController::class, 'store']);
     Route::post('/{ticket_id}/reply', [TicketController::class, 'reply']);
+    Route::post('/{ticket_id}/close', [TicketController::class, 'close']);
 });
 
 
@@ -49,6 +50,10 @@ Route::prefix('payment')->group(function () {
 
 # Dashboard
 Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
+    Route::get('/', [DashboardController::class, 'index']);
+    Route::get('/subscriptions', [DashboardController::class, 'subscriptions']);
+    Route::get('/wallet', [DashboardController::class, 'wallet']);
+
     Route::post('profile/modify', [DashboardController::class, 'modifyProfile']);
     Route::post('profile/send-email-verification-code', [DashboardController::class, 'sendEmailVerificationCode']);
     Route::post('profile/verify-email', [DashboardController::class, 'verifyEmail']);

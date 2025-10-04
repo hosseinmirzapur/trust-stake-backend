@@ -20,6 +20,7 @@ return new class extends Migration
             $table->decimal('balance_before');
             $table->decimal('balance_after');
             $table->string('tx_hash')->nullable()->index();
+            $table->string('network')->nullable();
             $table->timestamps();
         });
     }

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $id
  * @property string $currency
  * @property int|float $balance
+ * @property string|null $address
  * @method Builder whereCurrency(string $currency)
  */
 class Wallet extends Model

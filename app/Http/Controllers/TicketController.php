@@ -47,4 +47,11 @@ class TicketController extends Controller
             $this->service->reply($data, $ticket_id)
         );
     }
+
+    public function close(int $ticket_id): JsonResponse
+    {
+        return response()->json(
+            $this->service->close($ticket_id)
+        );
+    }
 }

@@ -12,6 +12,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Plan extends Model
 {
+    const TYPE_FOREX = 'forex';
+    const TYPE_CRYPTO = 'crypto';
+
     protected $guarded = [];
 
     /**

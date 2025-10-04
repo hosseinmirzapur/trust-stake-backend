@@ -20,6 +20,46 @@ class DashboardController extends Controller
     }
 
     /**
+     * @return JsonResponse
+     */
+    public function index(): JsonResponse
+    {
+        return response()->json(
+            $this->service->index()
+        );
+    }
+
+    /**
+     * @return JsonResponse
+     */
+    public function plans(): JsonResponse
+    {
+        return response()->json(
+            $this->service->plans()
+        );
+    }
+
+    /**
+     * @return JsonResponse
+     */
+    public function subscriptions(): JsonResponse
+    {
+        return response()->json(
+            $this->service->subscriptions()
+        );
+    }
+
+    /**
+     * @return JsonResponse
+     */
+    public function wallet(): JsonResponse
+    {
+        return response()->json(
+            $this->service->wallet()
+        );
+    }
+
+    /**
      * @param ModifyProfileRequest $request
      * @return JsonResponse
      */
@@ -66,6 +106,9 @@ class DashboardController extends Controller
     /**
      * @param Verify2FARequest $request
      * @return JsonResponse
+     * @throws IncompatibleWithGoogleAuthenticatorException
+     * @throws InvalidCharactersException
+     * @throws SecretKeyTooShortException
      */
     public function verify2FA(Verify2FARequest $request): JsonResponse
     {

@@ -80,7 +80,7 @@ class User extends Authenticatable implements FilamentUser
      */
     public function referrals(): HasMany
     {
-        return $this->hasMany(Referral::class);
+        return $this->hasMany(Referral::class, 'referred_by');
     }
 
     public static function generateReferralCode(): string

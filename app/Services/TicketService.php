@@ -78,6 +78,20 @@ class TicketService
         ];
     }
 
+    public function close(int $ticket_id): array
+    {
+        /** @var User $user */
+        $user = auth()->user();
+        $ticket = $user->tickets()->find($ticket_id);
+        abort_if(!$ticket, 404, 'Ticket not found');
+
+        $ticket->update([
+            'status' => Ticket::STATUS_CLOSED,
+        ]);
+
+        return compact('ticket');
+    }
+
     private function generateFileName(UploadedFile $file): string
     {
         return Str::random(20) . '.' . $file->getClientOriginalExtension();

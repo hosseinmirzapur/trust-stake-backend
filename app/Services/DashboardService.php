@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Mail\OtpMail;
+use App\Models\Plan;
 use App\Models\Referral;
 use App\Models\Subscription;
 use App\Models\User;
@@ -23,6 +24,67 @@ use Random\RandomException;
 class DashboardService
 {
     private const REMEMBER_TTL = 300; // seconds
+
+    public function index(): array
+    {
+        /** @var User $user */
+        $user = auth()->user();
+        $walletBalance = $user->wallet ? $user->wallet->spendableBalance() : 0;
+
+        $subStats = $user->subscriptions()->select("
+            SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count,
+            SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END) as inactive_count,
+        ")->first();
+        $active_count = $subStats['active_count'];
+        $inactive_count = $subStats['inactive_count'];
+
+        $tickets = $user->tickets()->count();
+        $referrals = $user->referrals()->count();
+
+        $subs = $user->subscriptions()
+            ->with('plan')
+            ->where('status', Subscription::STATUS_ACTIVE)
+            ->get();
+
+        $notifications = $user->notifications;
+
+        $plans = Plan::query()->where('disabled', false)->get();
+
+        return compact(
+            'walletBalance',
+            'active_count',
+            'inactive_count',
+            'tickets',
+            'referrals',
+            'subs',
+            'notifications',
+            'plans'
+        );
+    }
+
+    public function wallet(): array
+    {
+        /** @var User $user */
+        $user = auth()->user();
+        $balance = $user->wallet->spendableBalance();
+        $transactions = $user->wallet->transactions;
+        $tableData = [];
+
+        foreach ($transactions as $tx) {
+            $tableData[] = [
+                'id' => $tx->tx_hash,
+                'status' => $tx->status,
+                'network' => $tx->network,
+                'amount' => $tx->amount,
+                'created_at' => $tx->created_at,
+                'balance_before' => $tx->balance_before,
+                'balance_after' => $tx->balance_after,
+                'address' => $tx->wallet->address,
+            ];
+        }
+
+        return compact('balance', 'tableData');
+    }
 
     public function modifyProfile(array $data): array
     {
@@ -48,9 +110,7 @@ class DashboardService
         $user->update($data);
 
 
-        return [
-            'user' => $user,
-        ];
+        return compact('user');
     }
 
     /**
@@ -151,9 +211,7 @@ class DashboardService
             'hasTwoFactor' => true
         ]);
 
-        return [
-            'verified' => $verified,
-        ];
+        return compact('verified');
     }
 
     public function referral(): array
@@ -188,10 +246,7 @@ class DashboardService
                 ];
             }
         }
-        return [
-            'referralCode' => $referralCode,
-            'data' => $data,
-        ];
+        return compact('referralCode', 'data');
     }
 
     private function generateFileName(UploadedFile $file): string
