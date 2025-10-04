@@ -18,7 +18,7 @@ class PlanSeeder extends Seeder
             'type' => 'basic',
             'price' => 100.00,
             'profit' => 10.00,
-            'lock_time' => now()->addDays(30),
+            'lock_time_in_days' => 30,
         ]);
 
         Plan::create([
@@ -26,7 +26,7 @@ class PlanSeeder extends Seeder
             'type' => 'standard',
             'price' => 200.00,
             'profit' => 25.00,
-            'lock_time' => now()->addDays(60),
+            'lock_time_in_days' => 60,
         ]);
 
         Plan::create([
@@ -34,7 +34,7 @@ class PlanSeeder extends Seeder
             'type' => 'premium',
             'price' => 500.00,
             'profit' => 75.00,
-            'lock_time' => now()->addDays(90),
+            'lock_time_in_days' => 90,
         ]);
     }
 }
