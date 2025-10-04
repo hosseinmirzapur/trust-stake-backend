@@ -18,11 +18,13 @@ return new class extends Migration
             $table->string('country')->nullable();
             $table->string('mobile')->nullable()->unique();
             $table->string('email')->nullable()->unique();
+            $table->string('username')->unique()->nullable();
+            $table->string('profile_image')->nullable();
             $table->string('twoFactorKey')->nullable();
+            $table->boolean('hasTwoFactor')->default(false);
             $table->string('referral_code')->index()->default(User::generateReferralCode());
             $table->string('role')->index()->default(User::ROLE_USER);
             $table->string('password')->nullable();
-            // email verified at
             $table->datetime('email_verified_at')->nullable();
             $table->datetime('mobile_verified_at')->nullable();
 

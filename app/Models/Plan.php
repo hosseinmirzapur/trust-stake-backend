@@ -8,10 +8,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * @property int $price
  * @property int $id
- * @property string $lock_time
+ * @property int $lock_time_in_days
  */
 class Plan extends Model
 {
+    protected $guarded = [];
+
     /**
      * @return HasMany
      */

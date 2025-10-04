@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('type');
             $table->decimal('price');
             $table->decimal('profit');
-            $table->date('lock_time');
+            $table->decimal('lock_time_in_days');
 
             $table->boolean('disabled')->default(false);
 

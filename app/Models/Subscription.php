@@ -10,6 +10,8 @@ class Subscription extends Model
     const STATUS_ACTIVE = 'active';
     const STATUS_INACTIVE = 'inactive';
 
+    protected $guarded = [];
+
     /**
      * @return BelongsTo
      */

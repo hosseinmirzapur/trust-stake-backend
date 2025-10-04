@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use PragmaRX\Google2FA\Exceptions\IncompatibleWithGoogleAuthenticatorException;
 use PragmaRX\Google2FA\Exceptions\InvalidCharactersException;
 use PragmaRX\Google2FA\Exceptions\SecretKeyTooShortException;
+use Random\RandomException;
 
 class DashboardController extends Controller
 {
@@ -32,6 +33,7 @@ class DashboardController extends Controller
 
     /**
      * @return JsonResponse
+     * @throws RandomException
      */
     public function sendEmailVerificationCode(): JsonResponse
     {

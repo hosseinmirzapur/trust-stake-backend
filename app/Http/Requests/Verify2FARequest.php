@@ -24,7 +24,6 @@ class Verify2FARequest extends FormRequest
     {
         return [
             'authenticator_code' => 'required|string',
-            'email_code' => 'required|string',
         ];
     }
 }

@@ -40,7 +40,7 @@ class AuthService
         // send OTP via Mailtrap
         $otpCode = random_int(100000, 999999);
 
-        Cache::put("sign-in-token-$user->id", $otpCode, AuthService::REMEMBER_TTL);
+        Cache::put("sign-in-token-$user->id", $otpCode, self::REMEMBER_TTL);
 
         $this->sendEmailWithOtp($user->email, $otpCode);
 
@@ -72,7 +72,7 @@ class AuthService
             // For now, we'll still cache the OTP and return it
         }
 
-        Cache::put("sign-in-token-$user->id", $otpCode, AuthService::REMEMBER_TTL);
+        Cache::put("sign-in-token-$user->id", $otpCode, self::REMEMBER_TTL);
 
         // In production the code should not be returned
         return [
@@ -90,7 +90,7 @@ class AuthService
             Mail::to($email)->send(new OtpMail($otpCode, $email));
         } catch (\Exception $e) {
             // Log the error but don't fail the request
-            \Log::error('Failed to send OTP email: ' . $e->getMessage());
+            Log::error('Failed to send OTP email: ' . $e->getMessage());
         }
     }
 
@@ -168,7 +168,7 @@ class AuthService
         $authToken = $user->createToken('authToken')->plainTextToken;
         $stepToken = Str::uuid();
 
-        Cache::put("user-step-token-$user->id", $stepToken, AuthService::REMEMBER_TTL);
+        Cache::put("user-step-token-$user->id", $stepToken, self::REMEMBER_TTL);
 
         return [
             'authToken' => $authToken,
