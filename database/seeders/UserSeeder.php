@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class UserSeeder extends Seeder
 {
@@ -15,7 +16,7 @@ class UserSeeder extends Seeder
         $admin = User::query()->firstOrCreate([
             'name' => config('admin.name'),
             'email' => config(('admin.email')),
-            'password' => config('admin.password'),
+            'password' => Hash::make(config('admin.password')),
             'role' => 'admin'
         ]);
         dump($admin);
