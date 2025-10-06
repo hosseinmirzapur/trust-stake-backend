@@ -25,7 +25,7 @@ class RegisterDetailsRequest extends FormRequest
             'token' => 'required|string',
             'name' => 'required|string',
             'country' => 'required|string',
-            'mobile' => 'required_without:email|regex:/^[0-9]{10,15}$/unique:users,mobile',
+            'mobile' => 'required_without:email|regex:/^[0-9]{10,15}$/|unique:users,mobile',
             'email' => 'required_without:mobile|email|unique:users,email',
         ];
     }
