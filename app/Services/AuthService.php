@@ -207,9 +207,9 @@ class AuthService
 
         $user->update([
             'name' => $data['name'],
-            'email' => $data['email'],
+            'email' => $data['email'] ?? $user->email,
             'country' => $data['country'],
-            'mobile' => $data['mobile'],
+            'mobile' => $data['mobile'] ?? $user->mobile,
             'email_verified_at' => isset($data['mobile']) ? now() : null,
             'mobile_verified_at' => isset($data['email']) ? now() : null,
         ]);
