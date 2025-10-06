@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class UserSeeder extends Seeder
 {
@@ -13,10 +12,10 @@ class UserSeeder extends Seeder
      */
     public function run(): void
     {
-        $admin = User::firstOrCreate([
-            'name' => env('DEFAULT_ADMIN_USER'),
-            'email' => env('DEFAULT_ADMIN_EMAIL'),
-            'password' => Hash::make(env('DEFAULT_ADMIN_PASSWORD')),
+        $admin = User::query()->firstOrCreate([
+            'name' => config('admin.name'),
+            'email' => config(('admin.email')),
+            'password' => config('admin.password'),
             'role' => 'admin'
         ]);
         dump($admin);
