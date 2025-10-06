@@ -63,6 +63,13 @@ class DashboardService
     {
         /** @var User $user */
         $user = auth()->user();
+        if (is_null($user->wallet)) {
+            $user->wallet()->create([
+                'balance' => 0,
+                'currency' => 'USDT'
+            ]);
+        }
+
         $balance = $user->wallet->spendableBalance();
         $transactions = $user->wallet->transactions;
         $tableData = [];
