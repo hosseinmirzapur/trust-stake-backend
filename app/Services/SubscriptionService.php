@@ -55,7 +55,7 @@ class SubscriptionService
             $sub = $user->subscriptions()->create([
                 'plan_id' => $plan->id,
                 'start_date' => now(),
-                'end_date' => now()->add($plan->lock_time),
+                'end_date' => now()->addDays($plan->lock_time_in_days),
             ]);
 
             $tx = $wallet->transactions()->create([

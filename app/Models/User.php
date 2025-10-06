@@ -26,6 +26,7 @@ use PragmaRX\Google2FA\Google2FA;
  * @property int $id
  * @property string|null $email
  * @property bool|null $hasTwoFactor
+ * @property string $referral_code
  */
 class User extends Authenticatable implements FilamentUser
 {

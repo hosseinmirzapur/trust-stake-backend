@@ -60,7 +60,7 @@ class WalletService
         }
 
         // Create pending transaction
-        $transaction = Transaction::create([
+        $transaction = Transaction::query()->create([
             'wallet_id' => $wallet->id,
             'type' => Transaction::TYPE_DEPOSIT,
             'amount' => $amount,
