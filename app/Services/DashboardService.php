@@ -31,12 +31,9 @@ class DashboardService
         $user = auth()->user();
         $walletBalance = $user->wallet ? $user->wallet->spendableBalance() : 0;
 
-        $subStats = $user->subscriptions()->select("
-            SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count,
-            SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END) as inactive_count,
-        ")->first();
-        $active_count = $subStats['active_count'];
-        $inactive_count = $subStats['inactive_count'];
+        $subStats = $user->subscriptions();
+        $active_count = $subStats->where('status', Subscription::STATUS_ACTIVE)->count();
+        $inactive_count = $subStats->where('status', Subscription::STATUS_ACTIVE)->count();
 
         $tickets = $user->tickets()->count();
         $referrals = $user->referrals()->count();
