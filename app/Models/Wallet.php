@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Wallet extends Model
 {
+    protected $guarded = [];
 
     /**
      * @return BelongsTo
