@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Mail\OtpMail;
 use App\Models\User;
 use App\Services\WhatsAppService;
+use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
@@ -22,7 +23,7 @@ class AuthService
      */
     public function login(array $data): array
     {
-        if ($data['email']) {
+        if (isset($data['email'])) {
             return $this->handleEmailLogin($data['email']);
         }
 
@@ -62,8 +63,8 @@ class AuthService
         $whatsappResult = $this->sendOtpToWhatsapp($user->mobile, $otpCode);
 
         // If WhatsApp sending fails, we still proceed but log the issue
-        // In production, you might want to fallback to email or SMS
-        if (!$whatsappResult['success']) {
+        // In production, you might want to do fallback to email or SMS
+        if (!isset($whatsappResult['success'])) {
             Log::warning('WhatsApp OTP failed, but proceeding with login', [
                 'mobile' => $mobile,
                 'error' => $whatsappResult['error'] ?? 'Unknown error'
@@ -88,7 +89,7 @@ class AuthService
     {
         try {
             Mail::to($email)->send(new OtpMail($otpCode, $email));
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             // Log the error but don't fail the request
             Log::error('Failed to send OTP email: ' . $e->getMessage());
         }
@@ -104,7 +105,7 @@ class AuthService
 
             // Initialize session if needed
             $initResult = $whatsappService->initializeSession();
-            if (!$initResult['success']) {
+            if (!isset($initResult['success'])) {
                 Log::error('WhatsApp session initialization failed', [
                     'mobile' => $mobile,
                     'error' => $initResult
@@ -118,7 +119,7 @@ class AuthService
             // Send OTP via WhatsApp
             $result = $whatsappService->sendOtp($mobile, $otpCode);
 
-            if ($result['success']) {
+            if (isset($result['success'])) {
                 Log::info('WhatsApp OTP sent successfully', [
                     'mobile' => $mobile,
                     'otp_length' => strlen($otpCode)
@@ -131,7 +132,7 @@ class AuthService
             }
 
             return $result;
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Exception while sending WhatsApp OTP', [
                 'mobile' => $mobile,
                 'error' => $e->getMessage(),
@@ -148,7 +149,7 @@ class AuthService
 
     public function signup(array $data): array
     {
-        if ($data['email']) {
+        if (isset($data['email'])) {
             return $this->handleEmailSignup($data['email']);
         }
         return $this->handleMobileSignup($data['mobile']);
