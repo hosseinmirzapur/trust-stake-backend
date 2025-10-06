@@ -12,7 +12,7 @@ class PlanService
      */
     public function all(): array
     {
-        $plans = Plan::query()->whereNot('disabled', false)->get();
+        $plans = Plan::query()->where('disabled', false)->get();
         return [
             'plans' => $plans,
         ];
