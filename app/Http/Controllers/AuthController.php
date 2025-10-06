@@ -41,12 +41,11 @@ class AuthController extends Controller
     }
 
     /**
-     * @param Request $request
      * @return JsonResponse
      */
-    public function logout(Request $request): JsonResponse
+    public function logout(): JsonResponse
     {
-        $request->user()->token()->revoke();
+        auth()->user()->tokens()->delete();
 
         return response()->json();
     }
