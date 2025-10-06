@@ -32,26 +32,6 @@ class DashboardController extends Controller
     /**
      * @return JsonResponse
      */
-    public function plans(): JsonResponse
-    {
-        return response()->json(
-            $this->service->plans()
-        );
-    }
-
-    /**
-     * @return JsonResponse
-     */
-    public function subscriptions(): JsonResponse
-    {
-        return response()->json(
-            $this->service->subscriptions()
-        );
-    }
-
-    /**
-     * @return JsonResponse
-     */
     public function wallet(): JsonResponse
     {
         return response()->json(

@@ -21,10 +21,12 @@ class WalletService
     {
         /** @var User $user */
         $user = auth()->user();
-        $wallet = $user->wallet;
+
+        /** @var Wallet $usdtWallet */
+        $usdtWallet = $user->wallets()->where('currency', 'USDT')->first();
 
         return [
-            'balance' => $wallet->spendableBalance()
+            'balance' => !is_null($usdtWallet) ? $usdtWallet->spendableBalance() : 0
         ];
     }
 
@@ -35,7 +37,15 @@ class WalletService
         
         /** @var User $user */
         $user = auth()->user();
-        $wallet = $user->wallet;
+
+        /** @var Wallet $usdtWallet */
+        $usdtWallet = $user->wallets()->where('currency', 'USDT')->first();
+        if (!$usdtWallet) {
+            $usdtWallet = $user->wallets()->create([
+                'currency' => 'USDT',
+                'balance' => 0
+            ]);
+        }
 
         // Generate callback and return URLs
         $callbackUrl = route('payment.callback');
@@ -61,12 +71,12 @@ class WalletService
 
         // Create pending transaction
         $transaction = Transaction::query()->create([
-            'wallet_id' => $wallet->id,
+            'wallet_id' => $usdtWallet->id,
             'type' => Transaction::TYPE_DEPOSIT,
             'amount' => $amount,
             'status' => Transaction::STATUS_PENDING,
-            'balance_before' => $wallet->balance,
-            'balance_after' => $wallet->balance,
+            'balance_before' => $usdtWallet->balance,
+            'balance_after' => $usdtWallet->balance,
             'tx_hash' => $invoiceResult['track_id'] ?? null,
         ]);
 
@@ -87,10 +97,11 @@ class WalletService
         
         /** @var User $user */
         $user = auth()->user();
-        $wallet = $user->wallet;
+        /** @var Wallet $usdtWallet */
+        $usdtWallet = $user->wallets()->where('currency', 'USDT')->first();
 
         // Check if user has sufficient balance
-        if ($wallet->spendableBalance() < $amount) {
+        if ($usdtWallet->spendableBalance() < $amount) {
             return [
                 'success' => false,
                 'error' => 'Insufficient balance',
@@ -126,17 +137,17 @@ class WalletService
 
         // Create pending transaction
         $transaction = Transaction::create([
-            'wallet_id' => $wallet->id,
+            'wallet_id' => $usdtWallet->id,
             'type' => Transaction::TYPE_WITHDRAW,
             'amount' => $amount,
             'status' => Transaction::STATUS_PENDING,
-            'balance_before' => $wallet->balance,
-            'balance_after' => $wallet->balance - $amount,
+            'balance_before' => $usdtWallet->balance,
+            'balance_after' => $usdtWallet->balance - $amount,
             'tx_hash' => $withdrawalResult['tx_hash'] ?? null,
         ]);
 
         // Update wallet balance immediately for withdrawal (pending until confirmed)
-        $wallet->decrement('balance', $amount);
+        $usdtWallet->decrement('balance', $amount);
 
         return [
             'success' => true,

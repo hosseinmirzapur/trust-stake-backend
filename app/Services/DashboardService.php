@@ -7,6 +7,7 @@ use App\Models\Plan;
 use App\Models\Referral;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Models\Wallet;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\UploadedFile;
@@ -29,7 +30,9 @@ class DashboardService
     {
         /** @var User $user */
         $user = auth()->user();
-        $walletBalance = $user->wallet ? $user->wallet->spendableBalance() : 0;
+
+        $usdtWallet = $user->wallets()->where('currency', 'USDT')->first();
+        $walletBalance = !is_null($usdtWallet) ? $usdtWallet->spendableBalance() : 0;
 
         $subStats = $user->subscriptions();
         $active_count = $subStats->where('status', Subscription::STATUS_ACTIVE)->count();
@@ -63,15 +66,19 @@ class DashboardService
     {
         /** @var User $user */
         $user = auth()->user();
-        if (is_null($user->wallet)) {
-            $user->wallet()->create([
+        if ($user->wallets()->count() === 0) {
+            $user->wallets()->create([
                 'balance' => 0,
                 'currency' => 'USDT'
             ]);
         }
 
-        $balance = $user->wallet->spendableBalance();
-        $transactions = $user->wallet->transactions;
+        /** @var Wallet $usdtWallet */
+        $usdtWallet = $user->wallets()->where('currency', 'USDT')->first();
+
+        $balance = $usdtWallet->spendableBalance();
+
+        $transactions = $usdtWallet->transactions()->get();
         $tableData = [];
 
         foreach ($transactions as $tx) {

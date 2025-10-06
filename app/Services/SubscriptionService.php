@@ -44,31 +44,32 @@ class SubscriptionService
         /** @var User $user */
         $user = auth()->user();
 
-        $wallet = $user->wallet;
-        abort_if(!$wallet, 400, 'Wallet has not been initialized yet.');
+        abort_if(!$user->wallets()->count() === 0, 400, 'No wallet has been initialized yet.');
 
-        if ($wallet->spendableBalance() < $plan->price) {
+        $usdtWallet = $user->wallets()->where('currency', 'USDT')->first();
+
+        if ($usdtWallet->spendableBalance() < $plan->price) {
             abort(422, 'Balance not enough');
         }
 
-        [$sub, $tx] = DB::transaction(function () use ($plan, $user, $wallet) {
+        [$sub, $tx] = DB::transaction(function () use ($plan, $user, $usdtWallet) {
             $sub = $user->subscriptions()->create([
                 'plan_id' => $plan->id,
                 'start_date' => now(),
                 'end_date' => now()->addDays($plan->lock_time_in_days),
             ]);
 
-            $tx = $wallet->transactions()->create([
+            $tx = $usdtWallet->transactions()->create([
                 'type' => Transaction::TYPE_PAYMENT,
                 'amount' => $plan->price,
                 'status' => Transaction::STATUS_COMPLETED,
-                'balance_before' => $wallet->balance,
-                'balance_after' => $wallet->balance - $plan->price,
+                'balance_before' => $usdtWallet->balance,
+                'balance_after' => $usdtWallet->balance - $plan->price,
                 'tx_hash' => Transaction::generateManualHash()
             ]);
 
-            $wallet->update([
-                'balance' => $wallet->balance - $plan->price,
+            $usdtWallet->update([
+                'balance' => $usdtWallet->balance - $plan->price,
             ]);
 
             return [$sub, $tx];

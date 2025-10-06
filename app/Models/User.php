@@ -19,7 +19,7 @@ use PragmaRX\Google2FA\Exceptions\SecretKeyTooShortException;
 use PragmaRX\Google2FA\Google2FA;
 
 /**
- * @property Wallet $wallet
+ * @property Wallet[] $wallets
  * @property Collection<Ticket> $tickets
  * @property string $role
  * @property string $password
@@ -53,11 +53,11 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
-     * @return HasOne
+     * @return HasMany
      */
-    public function wallet(): HasOne
+    public function wallets(): HasMany
     {
-        return $this->hasOne(Wallet::class);
+        return $this->hasMany(Wallet::class);
     }
 
     /**
