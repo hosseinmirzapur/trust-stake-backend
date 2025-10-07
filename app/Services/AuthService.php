@@ -65,7 +65,7 @@ class AuthService
         // Cache the OTP code for verification
         Cache::put("sign-in-token-$user->id", $otpCode, self::REMEMBER_TTL);
 
-        // Dispatch WhatsApp job asynchronously
+        // Try WhatsApp first, but fallback to email immediately for reliability
         try {
             SendWhatsAppOtp::dispatch($user->mobile, $otpCode, $user->id);
 
@@ -84,21 +84,55 @@ class AuthService
                 'error' => $e->getMessage()
             ]);
 
-            // Fallback to email if job dispatch fails
-            if ($user->email) {
-                $this->sendEmailWithOtp($user->email, $otpCode);
-                $fallbackMethod = 'email_sync';
-            } else {
-                $fallbackMethod = 'failed';
-            }
-
             $whatsappSent = false;
+        }
+
+        // Always send email as well for guaranteed delivery
+        if ($user->email) {
+            try {
+                $this->sendEmailWithOtp($user->email, $otpCode);
+                $emailFallback = 'sent';
+
+                if (!$whatsappSent) {
+                    $fallbackMethod = 'email_primary';
+                } else {
+                    $fallbackMethod = 'whatsapp_and_email';
+                }
+
+                Log::info('Email OTP sent as fallback/guarantee', [
+                    'mobile' => $mobile,
+                    'email' => $user->email,
+                    'user_id' => $user->id,
+                    'whatsapp_also_sent' => $whatsappSent
+                ]);
+            } catch (Exception $e) {
+                Log::error('Email OTP fallback also failed', [
+                    'mobile' => $mobile,
+                    'email' => $user->email,
+                    'user_id' => $user->id,
+                    'error' => $e->getMessage()
+                ]);
+
+                if (!$whatsappSent) {
+                    $fallbackMethod = 'both_failed';
+                } else {
+                    $fallbackMethod = 'whatsapp_only';
+                }
+
+                $emailFallback = 'failed';
+            }
+        } else {
+            if (!$whatsappSent) {
+                $fallbackMethod = 'whatsapp_failed_no_email';
+            }
+            $emailFallback = 'no_email';
         }
 
         // In production the code should not be returned
         return [
             'code' => $otpCode,
             'whatsapp_sent' => $whatsappSent,
+            'email_sent' => $emailFallback === 'sent',
             'fallback_method' => $fallbackMethod,
         ];
     }
@@ -302,7 +336,7 @@ class AuthService
         // Generate OTP for verification
         $otpCode = random_int(100000, 999999);
 
-        // Dispatch WhatsApp job asynchronously
+        // Try WhatsApp job dispatch
         try {
             SendWhatsAppOtp::dispatch($user->mobile, $otpCode, $user->id);
 
@@ -321,15 +355,48 @@ class AuthService
                 'error' => $e->getMessage()
             ]);
 
-            // Fallback to email if job dispatch fails
-            if ($user->email) {
-                $this->sendEmailWithOtp($user->email, $otpCode);
-                $fallbackMethod = 'email_sync';
-            } else {
-                $fallbackMethod = 'failed';
-            }
-
             $whatsappSent = false;
+        }
+
+        // Always send email for guaranteed delivery during signup
+        if ($user->email) {
+            try {
+                $this->sendEmailWithOtp($user->email, $otpCode);
+                $emailFallback = 'sent';
+
+                if (!$whatsappSent) {
+                    $fallbackMethod = 'email_primary_signup';
+                } else {
+                    $fallbackMethod = 'whatsapp_and_email_signup';
+                }
+
+                Log::info('Email OTP sent for signup guarantee', [
+                    'mobile' => $mobile,
+                    'email' => $user->email,
+                    'user_id' => $user->id,
+                    'whatsapp_also_sent' => $whatsappSent
+                ]);
+            } catch (Exception $e) {
+                Log::error('Email OTP for signup also failed', [
+                    'mobile' => $mobile,
+                    'email' => $user->email,
+                    'user_id' => $user->id,
+                    'error' => $e->getMessage()
+                ]);
+
+                if (!$whatsappSent) {
+                    $fallbackMethod = 'both_failed_signup';
+                } else {
+                    $fallbackMethod = 'whatsapp_only_signup';
+                }
+
+                $emailFallback = 'failed';
+            }
+        } else {
+            if (!$whatsappSent) {
+                $fallbackMethod = 'whatsapp_failed_no_email_signup';
+            }
+            $emailFallback = 'no_email';
         }
 
         $authToken = $user->createToken('authToken')->plainTextToken;
@@ -345,6 +412,7 @@ class AuthService
             'stepToken' => $stepToken,
             'code' => $otpCode, // Remove in production
             'whatsapp_sent' => $whatsappSent,
+            'email_sent' => $emailFallback === 'sent',
             'fallback_method' => $fallbackMethod,
         ];
     }

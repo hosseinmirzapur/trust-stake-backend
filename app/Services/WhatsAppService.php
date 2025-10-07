@@ -17,12 +17,19 @@ class WhatsAppService
     {
         $this->apiKey = config('services.whatsapp.api_key');
         $this->baseUrl = config('services.whatsapp.api_url', 'https://api.whatsapp-plus.com');
-        // $this->sessionId = config('services.whatsapp.session_id', 'truststake-session');
-        $this->sessionId = Str::uuid();
+        $this->sessionId = config('services.whatsapp.session_id', 'truststake-session');
 
         if (!$this->apiKey) {
             Log::error('WhatsApp API key not configured');
         }
+
+        // Debug logging for configuration
+        Log::info('WhatsApp Service initialized', [
+            'api_key_configured' => !empty($this->apiKey),
+            'base_url' => $this->baseUrl,
+            'session_id' => $this->sessionId,
+            'key_length' => strlen($this->apiKey ?? '')
+        ]);
     }
 
     /**
@@ -291,6 +298,14 @@ class WhatsAppService
 
             $message = "Your TrustStake OTP code is: {$otpCode}. This code will expire in 5 minutes.";
 
+            Log::info('WhatsApp OTP sending attempt', [
+                'phone' => $phoneNumber,
+                'clean_phone' => $cleanPhone,
+                'session_id' => $this->sessionId,
+                'base_url' => $this->baseUrl,
+                'api_key_configured' => !empty($this->apiKey)
+            ]);
+
             $response = Http::withHeaders([
                 'x-api-key' => $this->apiKey,
                 'Content-Type' => 'application/json'
@@ -300,40 +315,37 @@ class WhatsAppService
                 'content' => $message
             ]);
 
+            Log::info('WhatsApp API response received', [
+                'phone' => $phoneNumber,
+                'status' => $response->status(),
+                'success' => $response->successful(),
+                'body' => $response->body()
+            ]);
+
             if ($response->successful()) {
                 $data = $response->json();
                 Log::info('WhatsApp OTP sent successfully', [
                     'phone' => $phoneNumber,
-                    'session_id' => $this->sessionId
+                    'session_id' => $this->sessionId,
+                    'response_data' => $data
                 ]);
                 return $data;
             }
 
-            // If we get 404 (session not connected), still return success
-            // The OTP sending might still work
-            if ($response->status() === 404) {
-                Log::info('WhatsApp OTP sent despite session not connected', [
-                    'phone' => $phoneNumber,
-                    'session_id' => $this->sessionId,
-                    'response' => $response->body()
-                ]);
-                return [
-                    'success' => true,
-                    'message' => 'OTP sent successfully',
-                    'note' => 'Session not connected but message sent'
-                ];
-            }
-
-            Log::error('Failed to send WhatsApp OTP', [
+            // Log the failure with full details
+            Log::error('WhatsApp API call failed', [
                 'phone' => $phoneNumber,
                 'session_id' => $this->sessionId,
                 'status' => $response->status(),
-                'body' => $response->body()
+                'body' => $response->body(),
+                'headers' => $response->headers(),
+                'url' => $response->effectiveUri()
             ]);
 
             return [
                 'success' => false,
-                'error' => 'Failed to send OTP',
+                'error' => 'WhatsApp API call failed',
+                'status' => $response->status(),
                 'details' => $response->body()
             ];
         } catch (\Exception $e) {
