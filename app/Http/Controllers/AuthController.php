@@ -80,6 +80,8 @@ class AuthController extends Controller
             $this->authService->verifyOtp($request->validate([
                 'otp' => 'required|string|size:6',
                 'type' => 'required|string|in:login,signup',
+                'email' => 'required_without:mobile|string|email',
+                'mobile' => 'required_without:email|string',
             ]))
         );
     }

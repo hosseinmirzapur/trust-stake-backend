@@ -89,6 +89,7 @@ class AuthService
     {
         try {
             Mail::to($email)->send(new OtpMail($otpCode, $email));
+            Log::info("Sent $otpCode to email: $email");
         } catch (Exception $e) {
             // Log the error but don't fail the request
             Log::error('Failed to send OTP email: ' . $e->getMessage());
@@ -159,22 +160,27 @@ class AuthService
     {
         $otp = $data['otp'];
         $type = $data['type'];
+        $user = null;
+
+        if (isset($data['mobile'])) {
+            /** @var User $user */
+            $user = User::query()->where('mobile', $data['mobile'])->first();
+        }
+
+        if (isset($data['email'])) {
+            /** @var User $user */
+            $user = User::query()->where('email', $data['email'])->first();
+        }
 
         if ($type === 'login') {
-            return $this->verifyLoginOtp($otp);
+            return $this->verifyLoginOtp($user, $otp);
         } else {
-            return $this->verifySignupOtp($otp);
+            return $this->verifySignupOtp($user, $otp);
         }
     }
 
-    private function verifyLoginOtp(string $otp): array
+    private function verifyLoginOtp(User $user, string $otp): array
     {
-        $user = request()->user();
-
-        if (!$user) {
-            abort(401, 'User not authenticated');
-        }
-
         $cachedOtp = Cache::get("sign-in-token-$user->id");
 
         if (!$cachedOtp || $cachedOtp != $otp) {
@@ -199,14 +205,8 @@ class AuthService
         ];
     }
 
-    private function verifySignupOtp(string $otp): array
+    private function verifySignupOtp(User $user, string $otp): array
     {
-        $user = request()->user();
-
-        if (!$user) {
-            abort(401, 'User not authenticated');
-        }
-
         $cachedOtp = Cache::get("sign-up-token-$user->id");
 
         if (!$cachedOtp || $cachedOtp != $otp) {
