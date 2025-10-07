@@ -109,7 +109,7 @@ class DashboardService
 
     public function modifyProfile(array $data): array
     {
-        if ($data['profile_image']) {
+        if (isset($data['profile_image'])) {
             $path = 'profile_images/';
             /** @var UploadedFile $file */
             $file = $data['profile_image'];
