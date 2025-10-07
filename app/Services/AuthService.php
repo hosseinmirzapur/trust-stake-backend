@@ -64,13 +64,25 @@ class AuthService
 
         // If WhatsApp sending fails, we still proceed but log the issue
         // In production, you might want to do fallback to email or SMS
-        if (!isset($whatsappResult['success'])) {
+        if (!isset($whatsappResult['success']) || $whatsappResult['success'] === false) {
             Log::warning('WhatsApp OTP failed, but proceeding with login', [
                 'mobile' => $mobile,
                 'error' => $whatsappResult['error'] ?? 'Unknown error'
             ]);
-            // You could implement a fallback mechanism here
-            // For now, we'll still cache the OTP and return it
+
+            // If WhatsApp fails and user has email, try email as fallback
+            if ($user->email) {
+                Log::info('Attempting email fallback for WhatsApp OTP failure', [
+                    'mobile' => $mobile,
+                    'email' => $user->email
+                ]);
+                $this->sendEmailWithOtp($user->email, $otpCode);
+                $fallbackMethod = 'email';
+            } else {
+                $fallbackMethod = 'whatsapp_failed';
+            }
+        } else {
+            $fallbackMethod = 'whatsapp';
         }
 
         Cache::put("sign-in-token-$user->id", $otpCode, self::REMEMBER_TTL);
@@ -79,6 +91,7 @@ class AuthService
         return [
             'code' => $otpCode,
             'whatsapp_sent' => $whatsappResult['success'] ?? false,
+            'fallback_method' => $fallbackMethod ?? 'whatsapp',
         ];
     }
 
@@ -295,11 +308,25 @@ class AuthService
         $otpCode = random_int(100000, 999999);
         $whatsappResult = $this->sendOtpToWhatsapp($user->mobile, $otpCode);
 
-        if (!isset($whatsappResult['success'])) {
+        if (!isset($whatsappResult['success']) || $whatsappResult['success'] === false) {
             Log::warning('WhatsApp OTP failed for signup', [
                 'mobile' => $mobile,
                 'error' => $whatsappResult['error'] ?? 'Unknown error'
             ]);
+
+            // If WhatsApp fails and user has email, try email as fallback
+            if ($user->email) {
+                Log::info('Attempting email fallback for WhatsApp signup OTP failure', [
+                    'mobile' => $mobile,
+                    'email' => $user->email
+                ]);
+                $this->sendEmailWithOtp($user->email, $otpCode);
+                $fallbackMethod = 'email';
+            } else {
+                $fallbackMethod = 'whatsapp_failed';
+            }
+        } else {
+            $fallbackMethod = 'whatsapp';
         }
 
         $authToken = $user->createToken('authToken')->plainTextToken;
@@ -313,6 +340,7 @@ class AuthService
             'stepToken' => $stepToken,
             'code' => $otpCode, // Remove in production
             'whatsapp_sent' => $whatsappResult['success'] ?? false,
+            'fallback_method' => $fallbackMethod ?? 'whatsapp',
         ];
     }
 

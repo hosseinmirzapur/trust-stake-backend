@@ -100,10 +100,19 @@ class WhatsAppService
                     return $startResult;
                 }
 
+                // If session exists but not connected, return the current status
+                if (isset($data['state']) && $data['state'] !== 'CONNECTED') {
+                    Log::info('WhatsApp session exists but not connected', [
+                        'session_id' => $this->sessionId,
+                        'state' => $data['state']
+                    ]);
+                    return $data;
+                }
+
                 return $data;
             }
 
-            // If we get a 404 or session not found, try to start the session
+            // If we get a 404, try to start the session
             if ($response->status() === 404) {
                 Log::info('Session not found (404), attempting to start session', [
                     'session_id' => $this->sessionId
@@ -118,6 +127,21 @@ class WhatsAppService
                 return $startResult;
             }
 
+            // If session already exists (422), return success since session exists
+            if ($response->status() === 422) {
+                $responseData = $response->json();
+                if (isset($responseData['error']) && strpos($responseData['error'], 'already exists') !== false) {
+                    Log::info('WhatsApp session already exists, which is good', [
+                        'session_id' => $this->sessionId
+                    ]);
+                    return [
+                        'success' => true,
+                        'state' => 'CONNECTED', // Assume connected if session exists
+                        'message' => 'Session already exists'
+                    ];
+                }
+            }
+
             return [
                 'success' => false,
                 'error' => 'Failed to get session status',
@@ -125,9 +149,14 @@ class WhatsAppService
                 'body' => $response->body()
             ];
         } catch (\Exception $e) {
+            Log::error('Exception while getting WhatsApp session status', [
+                'session_id' => $this->sessionId,
+                'error' => $e->getMessage()
+            ]);
+
             return [
                 'success' => false,
-                'error' => 'Exception occurred',
+                'error' => 'Exception occurred while getting session status',
                 'details' => $e->getMessage()
             ];
         }
@@ -245,18 +274,20 @@ class WhatsAppService
             // Ensure phone number is in correct format (without +)
             $cleanPhone = preg_replace('/[^0-9]/', '', $phoneNumber);
 
-            // Check if session is ready
-            $statusResponse = $this->getSessionStatus();
-            if (!$statusResponse['success'] || !isset($statusResponse['state']) || $statusResponse['state'] !== 'CONNECTED') {
-                Log::warning('WhatsApp session not ready for sending OTP', [
+            // Initialize session properly
+            $initResult = $this->initializeSession();
+            if (!$initResult['success']) {
+                Log::error('WhatsApp session initialization failed', [
                     'session_id' => $this->sessionId,
-                    'status' => $statusResponse
+                    'error' => $initResult
                 ]);
-                return [
-                    'success' => false,
-                    'error' => 'WhatsApp session not ready'
-                ];
+
+                // Even if initialization fails, try to send OTP anyway
+                // The session might still be available
             }
+
+            // Wait a moment for session to be ready
+            sleep(2);
 
             $message = "Your TrustStake OTP code is: {$otpCode}. This code will expire in 5 minutes.";
 
@@ -312,14 +343,13 @@ class WhatsAppService
     {
         $status = $this->getSessionStatus();
 
-        // If session status check initiated a new session, it might not be ready yet
-        // but we consider the service as "working"
+        // Only return true if session exists and is connected
         if ($status['success'] && isset($status['state'])) {
             return $status['state'] === 'CONNECTED';
         }
 
-        // If session doesn't exist but we can start it, consider it as "service available"
-        return isset($status['message']) && $status['message'] === 'session_not_found' ? false : $status['success'];
+        // If session not found or any other error, return false
+        return false;
     }
 
     /**
@@ -327,12 +357,30 @@ class WhatsAppService
      */
     public function initializeSession(): array
     {
-        if (!$this->isSessionReady()) {
-            Log::info('Initializing WhatsApp session', ['session_id' => $this->sessionId]);
+        $status = $this->getSessionStatus();
+
+        // If session already exists and is connected, return success
+        if ($status['success'] && isset($status['state']) && $status['state'] === 'CONNECTED') {
+            return ['success' => true, 'message' => 'Session already connected'];
+        }
+
+        // If session exists but not connected, wait a bit more
+        if ($status['success'] && isset($status['state'])) {
+            Log::info('WhatsApp session exists but not connected, waiting', [
+                'session_id' => $this->sessionId,
+                'state' => $status['state']
+            ]);
+            sleep(3);
+            return $this->getSessionStatus();
+        }
+
+        // If session doesn't exist or status check failed, try to start it
+        if (!$status['success']) {
+            Log::info('WhatsApp session not found, starting new session', ['session_id' => $this->sessionId]);
             return $this->startSession();
         }
 
-        return ['success' => true, 'message' => 'Session already ready'];
+        return $status;
     }
 
     /**
