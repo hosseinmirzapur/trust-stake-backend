@@ -160,16 +160,21 @@ class AuthService
     {
         $otp = $data['otp'];
         $type = $data['type'];
+        $credential = $data['credential'];
         $user = null;
 
-        if (isset($data['mobile'])) {
+        // Determine if credential is email or mobile
+        if (filter_var($credential, FILTER_VALIDATE_EMAIL)) {
             /** @var User $user */
-            $user = User::query()->where('mobile', $data['mobile'])->first();
+            $user = User::query()->where('email', $credential)->first();
+        } else {
+            // Treat as mobile number
+            /** @var User $user */
+            $user = User::query()->where('mobile', $credential)->first();
         }
 
-        if (isset($data['email'])) {
-            /** @var User $user */
-            $user = User::query()->where('email', $data['email'])->first();
+        if (!$user) {
+            abort(404, 'No user found with these credentials');
         }
 
         if ($type === 'login') {
@@ -340,7 +345,23 @@ class AuthService
 
     public function registerDetails(array $data): array
     {
-        $user = request()->user();
+        $credential = $data['credential'] ?? null;
+
+        if (!$credential) {
+            abort(401, 'Credential is required');
+        }
+
+        // Find user by credential (email or mobile)
+        if (filter_var($credential, FILTER_VALIDATE_EMAIL)) {
+            $user = User::query()->where('email', $credential)->first();
+        } else {
+            $user = User::query()->where('mobile', $credential)->first();
+        }
+
+        if (!$user) {
+            abort(404, 'User not found');
+        }
+
         $previousToken = Cache::get("user-step-token-$user->id");
 
         if (!$previousToken || $previousToken != $data['token']) {

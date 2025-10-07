@@ -51,13 +51,20 @@ class AuthController extends Controller
     }
 
     /**
-     * @param RegisterDetailsRequest $request
+     * @param Request $request
      * @return JsonResponse
      */
-    public function registerDetails(RegisterDetailsRequest $request): JsonResponse
+    public function registerDetails(Request $request): JsonResponse
     {
         return response()->json(
-            $this->authService->registerDetails($request->validated())
+            $this->authService->registerDetails($request->validate([
+                'token' => 'required|string',
+                'name' => 'required|string|max:255',
+                'country' => 'required|string|max:2',
+                'email' => 'nullable|email',
+                'mobile' => 'nullable|string',
+                'credential' => 'required|string',
+            ]))
         );
     }
 
@@ -80,8 +87,7 @@ class AuthController extends Controller
             $this->authService->verifyOtp($request->validate([
                 'otp' => 'required|string|size:6',
                 'type' => 'required|string|in:login,signup',
-                'email' => 'required_without:mobile|string|email',
-                'mobile' => 'required_without:email|string',
+                'credential' => 'required|string',
             ]))
         );
     }
