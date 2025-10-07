@@ -38,6 +38,18 @@ class SendWhatsAppOtp implements ShouldQueue
             ]);
 
             $whatsappService = new WhatsAppService();
+
+            // First, try to initialize the session
+            $initResult = $whatsappService->initializeSession();
+            if (!$initResult['success']) {
+                Log::warning('WhatsApp session initialization failed, proceeding with send attempt', [
+                    'mobile' => $this->mobile,
+                    'user_id' => $this->userId,
+                    'init_result' => $initResult,
+                    'job_id' => $this->job->getJobId()
+                ]);
+            }
+
             $result = $whatsappService->sendOtp($this->mobile, $this->otpCode);
 
             if (isset($result['success']) && $result['success']) {
@@ -47,10 +59,38 @@ class SendWhatsAppOtp implements ShouldQueue
                     'job_id' => $this->job->getJobId()
                 ]);
             } else {
+                $error = $result['error'] ?? 'Unknown error';
+
+                // Check if retry is possible for certain errors
+                if (isset($result['retry_possible']) && $result['retry_possible']) {
+                    Log::warning('WhatsApp OTP job failed but retry possible', [
+                        'mobile' => $this->mobile,
+                        'user_id' => $this->userId,
+                        'error' => $error,
+                        'job_id' => $this->job->getJobId()
+                    ]);
+
+                    // Try once more after a short delay
+                    sleep(2);
+                    $retryResult = $whatsappService->sendOtp($this->mobile, $this->otpCode);
+
+                    if ($retryResult['success']) {
+                        Log::info('WhatsApp OTP retry succeeded', [
+                            'mobile' => $this->mobile,
+                            'user_id' => $this->userId,
+                            'job_id' => $this->job->getJobId()
+                        ]);
+                        return;
+                    } else {
+                        $error = $retryResult['error'] ?? $error;
+                    }
+                }
+
                 Log::error('WhatsApp OTP job failed', [
                     'mobile' => $this->mobile,
                     'user_id' => $this->userId,
-                    'error' => $result['error'] ?? 'Unknown error',
+                    'error' => $error,
+                    'result' => $result,
                     'job_id' => $this->job->getJobId()
                 ]);
 
@@ -58,6 +98,9 @@ class SendWhatsAppOtp implements ShouldQueue
                 if ($this->userId) {
                     $this->tryEmailFallback();
                 }
+
+                // Don't throw exception - let the job complete even if WhatsApp fails
+                // The email fallback will handle delivery if needed
             }
         } catch (Exception $e) {
             Log::error('Exception in WhatsApp OTP job', [
@@ -68,12 +111,19 @@ class SendWhatsAppOtp implements ShouldQueue
                 'job_id' => $this->job->getJobId()
             ]);
 
-            // If we have user ID, try email fallback
+            // If we have user ID, try email fallback even on exception
             if ($this->userId) {
                 $this->tryEmailFallback();
             }
 
-            throw $e; // Re-throw to mark job as failed
+            // For critical exceptions, we might want to retry
+            // For now, don't throw to prevent infinite retries
+            Log::warning('WhatsApp OTP job completed with exception - not retrying', [
+                'mobile' => $this->mobile,
+                'user_id' => $this->userId,
+                'error' => $e->getMessage(),
+                'job_id' => $this->job->getJobId()
+            ]);
         }
     }
 
