@@ -117,23 +117,10 @@ class AuthService
         try {
             $whatsappService = new WhatsAppService();
 
-            // Initialize session if needed
-            $initResult = $whatsappService->initializeSession();
-            if (!isset($initResult['success'])) {
-                Log::error('WhatsApp session initialization failed', [
-                    'mobile' => $mobile,
-                    'error' => $initResult
-                ]);
-                return [
-                    'success' => false,
-                    'error' => 'WhatsApp service not available'
-                ];
-            }
-
-            // Send OTP via WhatsApp
+            // Send OTP via WhatsApp directly - let the service handle session management
             $result = $whatsappService->sendOtp($mobile, $otpCode);
 
-            if (isset($result['success'])) {
+            if (isset($result['success']) && $result['success']) {
                 Log::info('WhatsApp OTP sent successfully', [
                     'mobile' => $mobile,
                     'otp_length' => strlen($otpCode)
@@ -141,7 +128,7 @@ class AuthService
             } else {
                 Log::error('WhatsApp OTP sending failed', [
                     'mobile' => $mobile,
-                    'error' => $result
+                    'error' => $result['error'] ?? 'Unknown error'
                 ]);
             }
 
