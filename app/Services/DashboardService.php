@@ -62,6 +62,16 @@ class DashboardService
         );
     }
 
+    public function profile(): array
+    {
+        /** @var User $user */
+        $user = auth()->user();
+
+        return [
+            'user' => $user
+        ];
+    }
+
     public function wallet(): array
     {
         /** @var User $user */

@@ -32,6 +32,16 @@ class DashboardController extends Controller
     /**
      * @return JsonResponse
      */
+    public function profile(): JsonResponse
+    {
+        return response()->json([
+            'user' => auth()->user()
+        ]);
+    }
+
+    /**
+     * @return JsonResponse
+     */
     public function wallet(): JsonResponse
     {
         return response()->json(

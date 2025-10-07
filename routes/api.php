@@ -55,6 +55,7 @@ Route::prefix('dashboard')->middleware('auth:sanctum')->group(function () {
     Route::get('/', [DashboardController::class, 'index']);
     Route::get('/subscriptions', [DashboardController::class, 'subscriptions']);
     Route::get('/wallet', [DashboardController::class, 'wallet']);
+    Route::get('/profile', [DashboardController::class, 'profile']);
 
     Route::post('profile/modify', [DashboardController::class, 'modifyProfile']);
     Route::post('profile/send-email-verification-code', [DashboardController::class, 'sendEmailVerificationCode']);
