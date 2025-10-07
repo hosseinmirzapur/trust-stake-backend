@@ -121,11 +121,17 @@ class DashboardService
 
         /** @var User $user */
         $user = auth()->user();
-        if ($data['email']) {
+        if (isset($data['email'])) {
+            if (User::query()->where('email', $data['email'])->whereNot('id', $user->id)->exists()) {
+                abort(400, 'This email address has already been taken.');
+            }
             $data['email_verified_at'] = null;
         }
 
-        if ($data['mobile']) {
+        if (isset($data['mobile'])) {
+            if (User::query()->where('mobile', $data['mobile'])->whereNot('id', $user->id)->exists()) {
+                abort(400, 'This phone number has already been taken.');
+            }
             $data['mobile_verified_at'] = null;
         }
         $user->update($data);

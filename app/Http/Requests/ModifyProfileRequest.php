@@ -25,9 +25,9 @@ class ModifyProfileRequest extends FormRequest
         return [
             'name' => 'nullable|string|max:255',
             'username' => 'nullable|string|max:255|unique:users,username',
-            'email' => 'nullable|string|email|max:255|unique:users,email',
+            'email' => 'nullable|string|email|max:255',
             'country' => 'nullable|string|max:255',
-            'mobile' => 'nullable|string|max:255|unique:users,mobile|regex:/^[0-9]{10,15}$/',
+            'mobile' => 'nullable|string|max:255|regex:/^[0-9]{10,15}$/',
             'profile_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
         ];
     }
