@@ -16,6 +16,8 @@ Route::prefix('auth')->group(function () {
     Route::post('logout', [AuthController::class, 'logout']);
     Route::post('register-details', [AuthController::class, 'registerDetails'])->middleware('auth:sanctum');
     Route::get('me', [AuthController::class, 'me'])->middleware('auth:sanctum');
+    Route::post('verify-otp', [AuthController::class, 'verifyOtp']);
+    Route::post('resend-otp', [AuthController::class, 'resendOtp']);
 });
 
 # Wallet

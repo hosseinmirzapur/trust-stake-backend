@@ -69,4 +69,32 @@ class AuthController extends Controller
             ]
         );
     }
+
+    /**
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function verifyOtp(Request $request): JsonResponse
+    {
+        return response()->json(
+            $this->authService->verifyOtp($request->validate([
+                'otp' => 'required|string|size:6',
+                'type' => 'required|string|in:login,signup',
+            ]))
+        );
+    }
+
+    /**
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function resendOtp(Request $request): JsonResponse
+    {
+        return response()->json(
+            $this->authService->resendOtp($request->validate([
+                'email' => 'required_without:mobile|string|email',
+                'mobile' => 'required_without:email|string',
+            ]))
+        );
+    }
 }

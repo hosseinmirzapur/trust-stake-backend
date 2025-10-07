@@ -155,6 +155,126 @@ class AuthService
         return $this->handleMobileSignup($data['mobile']);
     }
 
+    public function verifyOtp(array $data): array
+    {
+        $otp = $data['otp'];
+        $type = $data['type'];
+
+        if ($type === 'login') {
+            return $this->verifyLoginOtp($otp);
+        } else {
+            return $this->verifySignupOtp($otp);
+        }
+    }
+
+    private function verifyLoginOtp(string $otp): array
+    {
+        $user = request()->user();
+
+        if (!$user) {
+            abort(401, 'User not authenticated');
+        }
+
+        $cachedOtp = Cache::get("sign-in-token-$user->id");
+
+        if (!$cachedOtp || $cachedOtp != $otp) {
+            abort(401, 'Invalid OTP code');
+        }
+
+        // Clear the OTP from cache
+        Cache::forget("sign-in-token-$user->id");
+
+        // Create Sanctum token for authenticated user
+        $token = $user->createToken('authToken')->plainTextToken;
+
+        return [
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'mobile' => $user->mobile,
+            ],
+            'token' => $token,
+            'two_factor_enabled' => !empty($user->google2fa_secret),
+        ];
+    }
+
+    private function verifySignupOtp(string $otp): array
+    {
+        $user = request()->user();
+
+        if (!$user) {
+            abort(401, 'User not authenticated');
+        }
+
+        $cachedOtp = Cache::get("sign-up-token-$user->id");
+
+        if (!$cachedOtp || $cachedOtp != $otp) {
+            abort(401, 'Invalid OTP code');
+        }
+
+        // Clear the OTP from cache
+        Cache::forget("sign-up-token-$user->id");
+
+        return [
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'mobile' => $user->mobile,
+            ],
+            'stepToken' => Cache::get("user-step-token-$user->id"),
+        ];
+    }
+
+    public function resendOtp(array $data): array
+    {
+        if (isset($data['email'])) {
+            return $this->resendEmailOtp($data['email']);
+        }
+        return $this->resendMobileOtp($data['mobile']);
+    }
+
+    private function resendEmailOtp(string $email): array
+    {
+        $user = User::query()->where('email', $email)->first();
+        abort_if(!$user, 404, 'No user with these credentials were found.');
+
+        $otpCode = random_int(100000, 999999);
+        Cache::put("sign-in-token-$user->id", $otpCode, self::REMEMBER_TTL);
+
+        $this->sendEmailWithOtp($user->email, $otpCode);
+
+        return [
+            'message' => 'OTP code sent to your email',
+            'code' => $otpCode, // Remove in production
+        ];
+    }
+
+    private function resendMobileOtp(string $mobile): array
+    {
+        $user = User::query()->where('mobile', $mobile)->first();
+        abort_if(!$user, 404, 'No user with these credentials were found.');
+
+        $otpCode = random_int(100000, 999999);
+        $whatsappResult = $this->sendOtpToWhatsapp($user->mobile, $otpCode);
+
+        if (!isset($whatsappResult['success'])) {
+            Log::warning('WhatsApp OTP failed during resend', [
+                'mobile' => $mobile,
+                'error' => $whatsappResult['error'] ?? 'Unknown error'
+            ]);
+        }
+
+        Cache::put("sign-in-token-$user->id", $otpCode, self::REMEMBER_TTL);
+
+        return [
+            'message' => 'OTP code sent via WhatsApp',
+            'code' => $otpCode, // Remove in production
+            'whatsapp_sent' => $whatsappResult['success'] ?? false,
+        ];
+    }
+
     private function handleMobileSignup(string $mobile): array
     {
         $user = User::query()->where('mobile', $mobile)->first();
@@ -166,14 +286,28 @@ class AuthService
             'role' => User::ROLE_USER,
         ]);
 
+        // Send OTP for verification
+        $otpCode = random_int(100000, 999999);
+        $whatsappResult = $this->sendOtpToWhatsapp($user->mobile, $otpCode);
+
+        if (!isset($whatsappResult['success'])) {
+            Log::warning('WhatsApp OTP failed for signup', [
+                'mobile' => $mobile,
+                'error' => $whatsappResult['error'] ?? 'Unknown error'
+            ]);
+        }
+
         $authToken = $user->createToken('authToken')->plainTextToken;
         $stepToken = Str::uuid();
 
         Cache::put("user-step-token-$user->id", $stepToken, self::REMEMBER_TTL);
+        Cache::put("sign-up-token-$user->id", $otpCode, self::REMEMBER_TTL);
 
         return [
             'authToken' => $authToken,
             'stepToken' => $stepToken,
+            'code' => $otpCode, // Remove in production
+            'whatsapp_sent' => $whatsappResult['success'] ?? false,
         ];
     }
 
@@ -187,12 +321,20 @@ class AuthService
             'role' => User::ROLE_USER,
         ]);
 
+        // Send OTP for verification
+        $otpCode = random_int(100000, 999999);
+        $this->sendEmailWithOtp($user->email, $otpCode);
+
         $authToken = $user->createToken('authToken')->plainTextToken;
         $stepToken = Str::uuid();
+
+        Cache::put("user-step-token-$user->id", $stepToken, self::REMEMBER_TTL);
+        Cache::put("sign-up-token-$user->id", $otpCode, self::REMEMBER_TTL);
 
         return [
             'authToken' => $authToken,
             'stepToken' => $stepToken,
+            'code' => $otpCode, // Remove in production
         ];
     }
 
