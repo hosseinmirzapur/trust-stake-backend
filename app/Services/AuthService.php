@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\SendWhatsAppOtp;
 use App\Mail\OtpMail;
 use App\Models\User;
 use App\Services\WhatsAppService;
@@ -58,40 +59,47 @@ class AuthService
         $user = User::query()->where('mobile', $mobile)->first();
         abort_if(!$user, 404, 'No user with these credentials were found.');
 
-        // Generate and send OTP via WhatsApp
+        // Generate OTP code first
         $otpCode = random_int(100000, 999999);
-        $whatsappResult = $this->sendOtpToWhatsapp($user->mobile, $otpCode);
 
-        // If WhatsApp sending fails, we still proceed but log the issue
-        // In production, you might want to do fallback to email or SMS
-        if (!isset($whatsappResult['success']) || $whatsappResult['success'] === false) {
-            Log::warning('WhatsApp OTP failed, but proceeding with login', [
+        // Cache the OTP code for verification
+        Cache::put("sign-in-token-$user->id", $otpCode, self::REMEMBER_TTL);
+
+        // Dispatch WhatsApp job asynchronously
+        try {
+            SendWhatsAppOtp::dispatch($user->mobile, $otpCode, $user->id);
+
+            Log::info('WhatsApp OTP job dispatched for mobile login', [
                 'mobile' => $mobile,
-                'error' => $whatsappResult['error'] ?? 'Unknown error'
+                'user_id' => $user->id,
+                'otp_length' => strlen($otpCode)
             ]);
 
-            // If WhatsApp fails and user has email, try email as fallback
-            if ($user->email) {
-                Log::info('Attempting email fallback for WhatsApp OTP failure', [
-                    'mobile' => $mobile,
-                    'email' => $user->email
-                ]);
-                $this->sendEmailWithOtp($user->email, $otpCode);
-                $fallbackMethod = 'email';
-            } else {
-                $fallbackMethod = 'whatsapp_failed';
-            }
-        } else {
-            $fallbackMethod = 'whatsapp';
-        }
+            $whatsappSent = true;
+            $fallbackMethod = 'whatsapp_async';
+        } catch (Exception $e) {
+            Log::error('Failed to dispatch WhatsApp OTP job', [
+                'mobile' => $mobile,
+                'user_id' => $user->id,
+                'error' => $e->getMessage()
+            ]);
 
-        Cache::put("sign-in-token-$user->id", $otpCode, self::REMEMBER_TTL);
+            // Fallback to email if job dispatch fails
+            if ($user->email) {
+                $this->sendEmailWithOtp($user->email, $otpCode);
+                $fallbackMethod = 'email_sync';
+            } else {
+                $fallbackMethod = 'failed';
+            }
+
+            $whatsappSent = false;
+        }
 
         // In production the code should not be returned
         return [
             'code' => $otpCode,
-            'whatsapp_sent' => $whatsappResult['success'] ?? false,
-            'fallback_method' => $fallbackMethod ?? 'whatsapp',
+            'whatsapp_sent' => $whatsappSent,
+            'fallback_method' => $fallbackMethod,
         ];
     }
 
@@ -291,29 +299,37 @@ class AuthService
             'role' => User::ROLE_USER,
         ]);
 
-        // Send OTP for verification
+        // Generate OTP for verification
         $otpCode = random_int(100000, 999999);
-        $whatsappResult = $this->sendOtpToWhatsapp($user->mobile, $otpCode);
 
-        if (!isset($whatsappResult['success']) || $whatsappResult['success'] === false) {
-            Log::warning('WhatsApp OTP failed for signup', [
+        // Dispatch WhatsApp job asynchronously
+        try {
+            SendWhatsAppOtp::dispatch($user->mobile, $otpCode, $user->id);
+
+            Log::info('WhatsApp OTP job dispatched for mobile signup', [
                 'mobile' => $mobile,
-                'error' => $whatsappResult['error'] ?? 'Unknown error'
+                'user_id' => $user->id,
+                'otp_length' => strlen($otpCode)
             ]);
 
-            // If WhatsApp fails and user has email, try email as fallback
+            $whatsappSent = true;
+            $fallbackMethod = 'whatsapp_async';
+        } catch (Exception $e) {
+            Log::error('Failed to dispatch WhatsApp OTP job for signup', [
+                'mobile' => $mobile,
+                'user_id' => $user->id,
+                'error' => $e->getMessage()
+            ]);
+
+            // Fallback to email if job dispatch fails
             if ($user->email) {
-                Log::info('Attempting email fallback for WhatsApp signup OTP failure', [
-                    'mobile' => $mobile,
-                    'email' => $user->email
-                ]);
                 $this->sendEmailWithOtp($user->email, $otpCode);
-                $fallbackMethod = 'email';
+                $fallbackMethod = 'email_sync';
             } else {
-                $fallbackMethod = 'whatsapp_failed';
+                $fallbackMethod = 'failed';
             }
-        } else {
-            $fallbackMethod = 'whatsapp';
+
+            $whatsappSent = false;
         }
 
         $authToken = $user->createToken('authToken')->plainTextToken;
@@ -322,12 +338,14 @@ class AuthService
         Cache::put("user-step-token-$user->id", $stepToken, self::REMEMBER_TTL);
         Cache::put("sign-up-token-$user->id", $otpCode, self::REMEMBER_TTL);
 
+        Cache::put("sign-up-token-$user->id", $otpCode, self::REMEMBER_TTL);
+
         return [
             'authToken' => $authToken,
             'stepToken' => $stepToken,
             'code' => $otpCode, // Remove in production
-            'whatsapp_sent' => $whatsappResult['success'] ?? false,
-            'fallback_method' => $fallbackMethod ?? 'whatsapp',
+            'whatsapp_sent' => $whatsappSent,
+            'fallback_method' => $fallbackMethod,
         ];
     }
 
