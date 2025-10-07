@@ -86,7 +86,7 @@ class User extends Authenticatable implements FilamentUser
 
     public static function generateReferralCode(): string
     {
-        return Str::lower(Str::random(6));
+        return Str::lower(Str::random(8));
     }
 
     /**
