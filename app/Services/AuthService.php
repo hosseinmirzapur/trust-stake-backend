@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Jobs\SendWhatsAppOtp;
 use App\Mail\OtpMail;
 use App\Models\User;
+use App\Models\WhatsAppNumber;
 use App\Services\WhatsAppService;
 use Exception;
 use Illuminate\Support\Facades\Cache;
@@ -65,23 +66,23 @@ class AuthService
         // Cache the OTP code for verification
         Cache::put("sign-in-token-$user->id", $otpCode, self::REMEMBER_TTL);
 
-        // Try WhatsApp first, but fallback to email immediately for reliability
-        try {
-            SendWhatsAppOtp::dispatch($user->mobile, $otpCode, $user->id);
+        // Try WhatsApp using available connected numbers
+        $whatsappResult = $this->sendOtpToWhatsapp($user->mobile, $otpCode);
 
-            Log::info('WhatsApp OTP job dispatched for mobile login', [
+        if ($whatsappResult['success']) {
+            Log::info('WhatsApp OTP sent for mobile login', [
                 'mobile' => $mobile,
                 'user_id' => $user->id,
                 'otp_length' => strlen($otpCode)
             ]);
 
             $whatsappSent = true;
-            $fallbackMethod = 'whatsapp_async';
-        } catch (Exception $e) {
-            Log::error('Failed to dispatch WhatsApp OTP job', [
+            $fallbackMethod = 'whatsapp_sync';
+        } else {
+            Log::error('Failed to send WhatsApp OTP for login', [
                 'mobile' => $mobile,
                 'user_id' => $user->id,
-                'error' => $e->getMessage()
+                'error' => $whatsappResult['error'] ?? 'Unknown error'
             ]);
 
             $whatsappSent = false;
@@ -157,19 +158,66 @@ class AuthService
     private function sendOtpToWhatsapp(string $mobile, string $otpCode): array
     {
         try {
-            $whatsappService = new WhatsAppService();
+            // Get an available connected WhatsApp number for sending OTP
+            $whatsappNumber = WhatsAppNumber::getLeastUsedAvailableNumber();
 
-            // Send OTP via WhatsApp directly - let the service handle session management
-            $result = $whatsappService->sendOtp($mobile, $otpCode);
-
-            if (isset($result['success']) && $result['success']) {
-                Log::info('WhatsApp OTP sent successfully', [
+            if (!$whatsappNumber) {
+                Log::warning('No available connected WhatsApp numbers for OTP sending', [
                     'mobile' => $mobile,
                     'otp_length' => strlen($otpCode)
                 ]);
+
+                return [
+                    'success' => false,
+                    'error' => 'No available WhatsApp numbers configured',
+                    'retry_possible' => false
+                ];
+            }
+
+            // Check if this specific number's session is actually connected
+            $whatsappService = new WhatsAppService($whatsappNumber->session_id);
+            $status = $whatsappService->getSessionStatus();
+
+            if (!$status['success'] || !$status['connected']) {
+                Log::warning('WhatsApp number session not connected', [
+                    'mobile' => $mobile,
+                    'whatsapp_number' => $whatsappNumber->mobile,
+                    'session_id' => $whatsappNumber->session_id,
+                    'status' => $status
+                ]);
+
+                // Mark as error since it's supposed to be connected
+                $whatsappNumber->markError();
+
+                return [
+                    'success' => false,
+                    'error' => 'WhatsApp session not connected',
+                    'retry_possible' => true,
+                    'status' => $status
+                ];
+            }
+
+            // Send OTP via WhatsApp using the selected number's session
+            $result = $whatsappService->sendOtpWithSession($mobile, $otpCode, $whatsappNumber->session_id);
+
+            if (isset($result['success']) && $result['success']) {
+                // Mark the number as successfully used
+                $whatsappNumber->markAsUsed();
+
+                Log::info('WhatsApp OTP sent successfully', [
+                    'mobile' => $mobile,
+                    'whatsapp_number' => $whatsappNumber->mobile,
+                    'session_id' => $whatsappNumber->session_id,
+                    'otp_length' => strlen($otpCode)
+                ]);
             } else {
+                // Mark the number with error
+                $whatsappNumber->markError();
+
                 Log::error('WhatsApp OTP sending failed', [
                     'mobile' => $mobile,
+                    'whatsapp_number' => $whatsappNumber->mobile,
+                    'session_id' => $whatsappNumber->session_id,
                     'error' => $result['error'] ?? 'Unknown error'
                 ]);
             }
@@ -185,7 +233,8 @@ class AuthService
             return [
                 'success' => false,
                 'error' => 'Exception occurred while sending OTP',
-                'details' => $e->getMessage()
+                'details' => $e->getMessage(),
+                'retry_possible' => true
             ];
         }
     }
@@ -304,9 +353,11 @@ class AuthService
         abort_if(!$user, 404, 'No user with these credentials were found.');
 
         $otpCode = random_int(100000, 999999);
+
+        // Use the same logic as regular OTP sending
         $whatsappResult = $this->sendOtpToWhatsapp($user->mobile, $otpCode);
 
-        if (!isset($whatsappResult['success'])) {
+        if (!isset($whatsappResult['success']) || !$whatsappResult['success']) {
             Log::warning('WhatsApp OTP failed during resend', [
                 'mobile' => $mobile,
                 'error' => $whatsappResult['error'] ?? 'Unknown error'
@@ -336,23 +387,23 @@ class AuthService
         // Generate OTP for verification
         $otpCode = random_int(100000, 999999);
 
-        // Try WhatsApp job dispatch
-        try {
-            SendWhatsAppOtp::dispatch($user->mobile, $otpCode, $user->id);
+        // Try WhatsApp using available connected numbers
+        $whatsappResult = $this->sendOtpToWhatsapp($user->mobile, $otpCode);
 
-            Log::info('WhatsApp OTP job dispatched for mobile signup', [
+        if ($whatsappResult['success']) {
+            Log::info('WhatsApp OTP sent for mobile signup', [
                 'mobile' => $mobile,
                 'user_id' => $user->id,
                 'otp_length' => strlen($otpCode)
             ]);
 
             $whatsappSent = true;
-            $fallbackMethod = 'whatsapp_async';
-        } catch (Exception $e) {
-            Log::error('Failed to dispatch WhatsApp OTP job for signup', [
+            $fallbackMethod = 'whatsapp_sync';
+        } else {
+            Log::error('Failed to send WhatsApp OTP for signup', [
                 'mobile' => $mobile,
                 'user_id' => $user->id,
-                'error' => $e->getMessage()
+                'error' => $whatsappResult['error'] ?? 'Unknown error'
             ]);
 
             $whatsappSent = false;

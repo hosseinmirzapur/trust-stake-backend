@@ -1,98 +1,98 @@
 <?php
 
- namespace App\Services;
+namespace App\Services;
 
- use Illuminate\Support\Facades\Http;
- use Illuminate\Support\Facades\Log;
- use Illuminate\Support\Facades\Cache;
- use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
- class WhatsAppService
- {
-     private string $apiKey;
-     private string $baseUrl;
-     private string $sessionId;
+class WhatsAppService
+{
+    private string $apiKey;
+    private string $baseUrl;
+    private string|null $sessionId;
 
-     public function __construct()
-     {
-         $this->apiKey = config('services.whatsapp.api_key');
-         $this->baseUrl = rtrim(config('services.whatsapp.api_url'), '/');
-         $this->sessionId = Str::uuid(); // do not change this
+    public function __construct(string|null $sessionId = null)
+    {
+        $this->apiKey = config('services.whatsapp.api_key');
+        $this->baseUrl = rtrim(config('services.whatsapp.api_url'), '/');
+        $this->sessionId = $sessionId ? strval($sessionId) : Str::uuid(); // do not change this
 
-         if (!$this->apiKey) {
-             Log::error('WhatsApp API key not configured');
-         }
+        if (!$this->apiKey) {
+            Log::error('WhatsApp API key not configured');
+        }
 
-         // Debug logging for configuration
-         Log::info('WhatsApp Service initialized', [
-             'api_key_configured' => !empty($this->apiKey),
-             'base_url' => $this->baseUrl,
-             'session_id' => $this->sessionId,
-             'cache_enabled' => Cache::getStore() !== null
-         ]);
-     }
+        // Debug logging for configuration
+        Log::info('WhatsApp Service initialized', [
+            'api_key_configured' => !empty($this->apiKey),
+            'base_url' => $this->baseUrl,
+            'session_id' => $this->sessionId,
+            'cache_enabled' => Cache::getStore() !== null
+        ]);
+    }
 
-     /**
-      * Get cache key for session data
-      */
-     private function getCacheKey(string $type = 'status'): string
-     {
-         return "whatsapp_session_{$this->sessionId}_$type";
-     }
+    /**
+     * Get cache key for session data
+     */
+    private function getCacheKey(string $type = 'status'): string
+    {
+        return "whatsapp_session_{$this->sessionId}_$type";
+    }
 
-     /**
-      * Cache session status for better performance
-      */
-     private function cacheSessionStatus(array $status, int $ttl = 300): void
-     {
-         Cache::put($this->getCacheKey('status'), $status, $ttl);
-     }
+    /**
+     * Cache session status for better performance
+     */
+    private function cacheSessionStatus(array $status, int $ttl = 300): void
+    {
+        Cache::put($this->getCacheKey('status'), $status, $ttl);
+    }
 
-     /**
-      * Get cached session status
-      */
-     private function getCachedSessionStatus(): ?array
-     {
-         return Cache::get($this->getCacheKey('status'));
-     }
+    /**
+     * Get cached session status
+     */
+    private function getCachedSessionStatus(): ?array
+    {
+        return Cache::get($this->getCacheKey('status'));
+    }
 
-     /**
-      * Clear session cache
-      */
-     private function clearSessionCache(): void
-     {
-         Cache::forget($this->getCacheKey('status'));
-         Cache::forget($this->getCacheKey('info'));
-     }
+    /**
+     * Clear session cache
+     */
+    private function clearSessionCache(): void
+    {
+        Cache::forget($this->getCacheKey('status'));
+        Cache::forget($this->getCacheKey('info'));
+    }
 
-     /**
-      * Make authenticated HTTP request to WhatsApp API
-      */
-     private function makeRequest(string $method, string $endpoint, array $data = null)
-     {
-         $url = "{$this->baseUrl}{$endpoint}";
+    /**
+     * Make authenticated HTTP request to WhatsApp API
+     */
+    private function makeRequest(string $method, string $endpoint, array $data = null)
+    {
+        $url = "{$this->baseUrl}{$endpoint}";
 
-         $headers = [
-             'X-Api-Key' => $this->apiKey,
-             'Accept' => 'application/json'
-         ];
+        $headers = [
+            'X-Api-Key' => $this->apiKey,
+            'Accept' => 'application/json'
+        ];
 
-         if ($data && in_array($method, ['POST', 'PUT', 'PATCH'])) {
-             $headers['Content-Type'] = 'application/json';
-         }
+        if ($data && in_array($method, ['POST', 'PUT', 'PATCH'])) {
+            $headers['Content-Type'] = 'application/json';
+        }
 
-         Log::info('WhatsApp API request', [
-             'method' => $method,
-             'url' => $url,
-             'session_id' => $this->sessionId
-         ]);
+        Log::info('WhatsApp API request', [
+            'method' => $method,
+            'url' => $url,
+            'session_id' => $this->sessionId
+        ]);
 
-         if ($data) {
-             return Http::withHeaders($headers)->{$method}($url, $data);
-         }
+        if ($data) {
+            return Http::withHeaders($headers)->{$method}($url, $data);
+        }
 
-         return Http::withHeaders($headers)->{$method}($url);
-     }
+        return Http::withHeaders($headers)->{$method}($url);
+    }
 
     /**
      * Start a new WhatsApp session
@@ -1054,6 +1054,141 @@
                     'session_id' => $this->sessionId,
                     'api_key_configured' => !empty($this->apiKey)
                 ]
+            ];
+        }
+    }
+
+    /**
+     * Send OTP message via WhatsApp with specific session
+     * POST /client/sendMessage/{sessionId}
+     */
+    public function sendOtpWithSession(string $phoneNumber, string $otpCode, string $sessionId): array
+    {
+        try {
+            // Temporarily override the session ID for this request
+            $originalSessionId = $this->sessionId;
+            $this->sessionId = $sessionId;
+
+            // Validate API key
+            if (empty($this->apiKey) || $this->apiKey !== 'whatsappplus') {
+                Log::error('WhatsApp API key not properly configured', [
+                    'phone' => $phoneNumber,
+                    'session_id' => $sessionId
+                ]);
+
+                $this->sessionId = $originalSessionId; // Restore original session ID
+                return [
+                    'success' => false,
+                    'error' => 'WhatsApp API key not configured properly',
+                    'retry_possible' => false
+                ];
+            }
+
+            // Check session status first
+            $status = $this->getSessionStatus();
+
+            if (!$status['success'] || !$status['connected']) {
+                Log::error('WhatsApp session not connected for OTP sending', [
+                    'phone' => $phoneNumber,
+                    'session_id' => $sessionId,
+                    'status' => $status
+                ]);
+
+                $this->sessionId = $originalSessionId; // Restore original session ID
+                return [
+                    'success' => false,
+                    'error' => 'WhatsApp session not connected',
+                    'retry_possible' => true,
+                    'status' => $status
+                ];
+            }
+
+            // Prepare the message
+            $messageText = "Your OTP verification code is: {$otpCode}\n\nThis code will expire in 5 minutes.";
+
+            Log::info('WhatsApp OTP sending attempt', [
+                'phone' => $phoneNumber,
+                'session_id' => $sessionId,
+                'otp_length' => strlen($otpCode)
+            ]);
+
+            $response = $this->makeRequest('post', "/client/sendMessage/{$sessionId}", [
+                'chatId' => "{$phoneNumber}@c.us",
+                'message' => $messageText
+            ]);
+
+            Log::info('WhatsApp API response received', [
+                'phone' => $phoneNumber,
+                'session_id' => $sessionId,
+                'status' => $response->status()
+            ]);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                Log::info('WhatsApp OTP sent successfully', [
+                    'phone' => $phoneNumber,
+                    'session_id' => $sessionId,
+                    'response' => $data
+                ]);
+
+                $this->sessionId = $originalSessionId; // Restore original session ID
+                return [
+                    'success' => true,
+                    'message' => 'OTP sent successfully via WhatsApp',
+                    'data' => $data,
+                    'retry_possible' => false
+                ];
+            }
+
+            if ($response->status() === 404) {
+                Log::error('WhatsApp session not found or not connected', [
+                    'phone' => $phoneNumber,
+                    'session_id' => $sessionId,
+                    'status' => $response->status()
+                ]);
+
+                $this->sessionId = $originalSessionId; // Restore original session ID
+                return [
+                    'success' => false,
+                    'error' => 'WhatsApp session not connected',
+                    'status' => $response->status(),
+                    'retry_possible' => true
+                ];
+            }
+
+            // Log the failure with full details
+            Log::error('WhatsApp API call failed', [
+                'phone' => $phoneNumber,
+                'session_id' => $sessionId,
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            $this->sessionId = $originalSessionId; // Restore original session ID
+            return [
+                'success' => false,
+                'error' => 'WhatsApp API call failed',
+                'status' => $response->status(),
+                'response' => $response->body(),
+                'retry_possible' => true
+            ];
+        } catch (\Exception $e) {
+            Log::error('Exception while sending WhatsApp OTP', [
+                'phone' => $phoneNumber,
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+
+            // Restore original session ID before returning
+            if (isset($originalSessionId)) {
+                $this->sessionId = $originalSessionId;
+            }
+
+            return [
+                'success' => false,
+                'error' => 'Exception occurred while sending WhatsApp OTP',
+                'details' => $e->getMessage(),
+                'retry_possible' => true
             ];
         }
     }

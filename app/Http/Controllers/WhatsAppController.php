@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\WhatsAppNumber;
 use App\Services\WhatsAppService;
 use Exception;
 use Illuminate\Http\Request;
