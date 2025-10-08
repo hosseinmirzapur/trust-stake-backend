@@ -7,6 +7,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Wallet;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\URL;
 
 class WalletService
 {
@@ -34,7 +35,7 @@ class WalletService
     {
         $amount = $data['amount'];
         $network = $data['network'];
-        
+
         /** @var User $user */
         $user = auth()->user();
 
@@ -48,9 +49,10 @@ class WalletService
         }
 
         // Generate callback and return URLs
-        $callbackUrl = route('payment.callback');
-        $returnUrl = route('payment.success');
-        
+        $callbackUrl = URL::to('/api/payment/callback');
+        // Return to payment gateway instead of success page
+        $returnUrl = 'https://app.oxapay.com/payment/status'; // Redirect back to OxaPay
+
         // Generate invoice using OxaPay
         $invoiceResult = $this->paymentService->generateInvoice(
             $amount,
@@ -94,7 +96,7 @@ class WalletService
         $amount = $data['amount'];
         $network = $data['network'];
         $walletAddress = $data['walletAddress'];
-        
+
         /** @var User $user */
         $user = auth()->user();
         /** @var Wallet $usdtWallet */
@@ -117,7 +119,7 @@ class WalletService
         }
 
         // Generate callback URL
-        $callbackUrl = route('withdrawal.callback');
+        $callbackUrl = URL::to('/api/payment/withdrawal/callback');
 
         // Process withdrawal using OxaPay
         $withdrawalResult = $this->paymentService->processWithdrawal(
@@ -168,7 +170,7 @@ class WalletService
     {
         // Basic validation - in production, you would use network-specific validation
         $network = strtolower($network);
-        
+
         // Common crypto address patterns
         $patterns = [
             'ethereum' => '/^0x[a-fA-F0-9]{40}$/',
