@@ -12,7 +12,7 @@ class SendWhatsAppOtp implements ShouldQueue
 {
     use Queueable;
 
-    public $timeout = 30; // 30 seconds timeout for the job
+    public $timeout = 60; // 60 seconds timeout for the job
     public $tries = 3;    // Retry up to 3 times if it fails
 
     /**
@@ -50,7 +50,33 @@ class SendWhatsAppOtp implements ShouldQueue
                 ]);
             }
 
+            // Check if session needs authentication
+            if (isset($initResult['needs_auth']) && $initResult['needs_auth']) {
+                Log::info('WhatsApp session needs user authentication first', [
+                    'mobile' => $this->mobile,
+                    'user_id' => $this->userId,
+                    'job_id' => $this->job->getJobId()
+                ]);
+
+                // Try email fallback immediately since session is not ready
+                if ($this->userId) {
+                    $this->tryEmailFallback();
+                }
+
+                Log::warning('WhatsApp session not authenticated - email fallback used', [
+                    'mobile' => $this->mobile,
+                    'user_id' => $this->userId,
+                    'job_id' => $this->job->getJobId()
+                ]);
+                return; // Don't proceed with WhatsApp sending
+            }
+
             $result = $whatsappService->sendOtp($this->mobile, $this->otpCode);
+
+            // If WhatsApp fails, try email fallback
+            if (!$result['success'] && $this->userId) {
+                $this->tryEmailFallback();
+            }
 
             if (isset($result['success']) && $result['success']) {
                 Log::info('WhatsApp OTP job completed successfully', [

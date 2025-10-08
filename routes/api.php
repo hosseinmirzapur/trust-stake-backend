@@ -7,6 +7,7 @@ use App\Http\Controllers\PlanController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\WalletController;
+use App\Http\Controllers\WhatsAppController;
 use Illuminate\Support\Facades\Route;
 
 # Auth Routes
@@ -48,6 +49,23 @@ Route::prefix('payment')->group(function () {
     Route::post('/callback', [PaymentController::class, 'handlePaymentCallback']);
     Route::post('/withdrawal/callback', [PaymentController::class, 'handleWithdrawalCallback']);
     Route::get('/success', [PaymentController::class, 'paymentSuccess']);
+});
+
+# WhatsApp API Routes
+Route::prefix('whatsapp')->group(function () {
+    Route::get('/session/start', [WhatsAppController::class, 'startSession']);
+    Route::get('/session/start/{sessionId}', [WhatsAppController::class, 'startSession']);
+    Route::get('/session/stop/{sessionId}', [WhatsAppController::class, 'stopSession']);
+    Route::get('/session/restart/{sessionId}', [WhatsAppController::class, 'restartSession']);
+    Route::get('/session/terminate/{sessionId}', [WhatsAppController::class, 'terminateSession']);
+    Route::get('/session/status/{sessionId}', [WhatsAppController::class, 'getSessionStatus']);
+    Route::get('/session/qr/{sessionId}/image', [WhatsAppController::class, 'getQRCode']);
+    Route::post('/session/requestPairingCode/{sessionId}', [WhatsAppController::class, 'requestPairingCode']);
+    Route::get('/session/getPageScreenshot/{sessionId}', [WhatsAppController::class, 'getPageScreenshot']);
+    Route::get('/session/getSessions', [WhatsAppController::class, 'getAllSessions']);
+    Route::get('/session/terminateInactive', [WhatsAppController::class, 'terminateInactiveSessions']);
+    Route::get('/session/terminateAll', [WhatsAppController::class, 'terminateAllSessions']);
+    Route::post('/client/sendMessage/{sessionId}', [WhatsAppController::class, 'sendMessage']);
 });
 
 # Dashboard

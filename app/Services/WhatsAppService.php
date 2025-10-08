@@ -1,55 +1,127 @@
 <?php
 
-namespace App\Services;
+ namespace App\Services;
 
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
+ use Illuminate\Support\Facades\Http;
+ use Illuminate\Support\Facades\Log;
+ use Illuminate\Support\Facades\Cache;
+ use Illuminate\Support\Str;
 
-class WhatsAppService
-{
-    private string $apiKey;
-    private string $baseUrl;
-    private string $sessionId;
+ class WhatsAppService
+ {
+     private string $apiKey;
+     private string $baseUrl;
+     private string $sessionId;
 
-    public function __construct()
-    {
-        $this->apiKey = config('services.whatsapp.api_key');
-        $this->baseUrl = config('services.whatsapp.api_url', 'https://api.whatsapp-plus.com');
-        $this->sessionId = config('services.whatsapp.session_id', 'truststake-session');
+     public function __construct()
+     {
+         $this->apiKey = config('services.whatsapp.api_key');
+         $this->baseUrl = rtrim(config('services.whatsapp.api_url'), '/');
+         $this->sessionId = Str::uuid(); // do not change this
 
-        if (!$this->apiKey) {
-            Log::error('WhatsApp API key not configured');
-        }
+         if (!$this->apiKey) {
+             Log::error('WhatsApp API key not configured');
+         }
 
-        // Debug logging for configuration
-        Log::info('WhatsApp Service initialized', [
-            'api_key_configured' => !empty($this->apiKey),
-            'base_url' => $this->baseUrl,
-            'session_id' => $this->sessionId,
-            'key_length' => strlen($this->apiKey ?? '')
-        ]);
-    }
+         // Debug logging for configuration
+         Log::info('WhatsApp Service initialized', [
+             'api_key_configured' => !empty($this->apiKey),
+             'base_url' => $this->baseUrl,
+             'session_id' => $this->sessionId,
+             'cache_enabled' => Cache::getStore() !== null
+         ]);
+     }
+
+     /**
+      * Get cache key for session data
+      */
+     private function getCacheKey(string $type = 'status'): string
+     {
+         return "whatsapp_session_{$this->sessionId}_$type";
+     }
+
+     /**
+      * Cache session status for better performance
+      */
+     private function cacheSessionStatus(array $status, int $ttl = 300): void
+     {
+         Cache::put($this->getCacheKey('status'), $status, $ttl);
+     }
+
+     /**
+      * Get cached session status
+      */
+     private function getCachedSessionStatus(): ?array
+     {
+         return Cache::get($this->getCacheKey('status'));
+     }
+
+     /**
+      * Clear session cache
+      */
+     private function clearSessionCache(): void
+     {
+         Cache::forget($this->getCacheKey('status'));
+         Cache::forget($this->getCacheKey('info'));
+     }
+
+     /**
+      * Make authenticated HTTP request to WhatsApp API
+      */
+     private function makeRequest(string $method, string $endpoint, array $data = null)
+     {
+         $url = "{$this->baseUrl}{$endpoint}";
+
+         $headers = [
+             'X-Api-Key' => $this->apiKey,
+             'Accept' => 'application/json'
+         ];
+
+         if ($data && in_array($method, ['POST', 'PUT', 'PATCH'])) {
+             $headers['Content-Type'] = 'application/json';
+         }
+
+         Log::info('WhatsApp API request', [
+             'method' => $method,
+             'url' => $url,
+             'session_id' => $this->sessionId
+         ]);
+
+         if ($data) {
+             return Http::withHeaders($headers)->{$method}($url, $data);
+         }
+
+         return Http::withHeaders($headers)->{$method}($url);
+     }
 
     /**
      * Start a new WhatsApp session
+     * GET /session/start/{sessionId}
      */
     public function startSession(): array
     {
         try {
-            $response = Http::withHeaders([
-                'x-api-key' => $this->apiKey,
-                'Content-Type' => 'application/json'
-            ])->get("{$this->baseUrl}/session/start/{$this->sessionId}");
+            Log::info('Starting WhatsApp session', [
+                'session_id' => $this->sessionId,
+                'base_url' => $this->baseUrl
+            ]);
+
+            $response = $this->makeRequest('get', "/session/start/{$this->sessionId}");
 
             if ($response->successful()) {
                 $data = $response->json();
+                $this->clearSessionCache(); // Clear cache when starting new session
+
                 Log::info('WhatsApp session started successfully', [
                     'session_id' => $this->sessionId,
                     'response' => $data
                 ]);
-                return $data;
+
+                return [
+                    'success' => true,
+                    'message' => $data['message'] ?? 'Session started successfully',
+                    'data' => $data
+                ];
             }
 
             Log::error('Failed to start WhatsApp session', [
@@ -61,6 +133,7 @@ class WhatsAppService
             return [
                 'success' => false,
                 'error' => 'Failed to start session',
+                'status' => $response->status(),
                 'details' => $response->body()
             ];
         } catch (\Exception $e) {
@@ -71,7 +144,320 @@ class WhatsAppService
 
             return [
                 'success' => false,
-                'error' => 'Exception occurred',
+                'error' => 'Exception occurred while starting session',
+                'details' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Stop WhatsApp session
+     * GET /session/stop/{sessionId}
+     */
+    public function stopSession(): array
+    {
+        try {
+            Log::info('Stopping WhatsApp session', [
+                'session_id' => $this->sessionId
+            ]);
+
+            $response = $this->makeRequest('get', "/session/stop/{$this->sessionId}");
+
+            if ($response->successful()) {
+                $data = $response->json();
+                $this->clearSessionCache(); // Clear cache when stopping session
+
+                Log::info('WhatsApp session stopped successfully', [
+                    'session_id' => $this->sessionId,
+                    'response' => $data
+                ]);
+
+                return [
+                    'success' => true,
+                    'message' => $data['message'] ?? 'Session stopped successfully',
+                    'data' => $data
+                ];
+            }
+
+            Log::error('Failed to stop WhatsApp session', [
+                'session_id' => $this->sessionId,
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to stop session',
+                'status' => $response->status(),
+                'details' => $response->body()
+            ];
+        } catch (\Exception $e) {
+            Log::error('Exception while stopping WhatsApp session', [
+                'session_id' => $this->sessionId,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Exception occurred while stopping session',
+                'details' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Restart WhatsApp session
+     * GET /session/restart/{sessionId}
+     */
+    public function restartSession(): array
+    {
+        try {
+            Log::info('Restarting WhatsApp session', [
+                'session_id' => $this->sessionId
+            ]);
+
+            $response = $this->makeRequest('get', "/session/restart/{$this->sessionId}");
+
+            if ($response->successful()) {
+                $data = $response->json();
+                $this->clearSessionCache(); // Clear cache when restarting session
+
+                Log::info('WhatsApp session restarted successfully', [
+                    'session_id' => $this->sessionId,
+                    'response' => $data
+                ]);
+
+                return [
+                    'success' => true,
+                    'message' => $data['message'] ?? 'Session restarted successfully',
+                    'data' => $data
+                ];
+            }
+
+            Log::error('Failed to restart WhatsApp session', [
+                'session_id' => $this->sessionId,
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to restart session',
+                'status' => $response->status(),
+                'details' => $response->body()
+            ];
+        } catch (\Exception $e) {
+            Log::error('Exception while restarting WhatsApp session', [
+                'session_id' => $this->sessionId,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Exception occurred while restarting session',
+                'details' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Terminate WhatsApp session
+     * GET /session/terminate/{sessionId}
+     */
+    public function terminateSession(): array
+    {
+        try {
+            Log::info('Terminating WhatsApp session', [
+                'session_id' => $this->sessionId
+            ]);
+
+            $response = $this->makeRequest('get', "/session/terminate/{$this->sessionId}");
+
+            if ($response->successful()) {
+                $data = $response->json();
+                $this->clearSessionCache(); // Clear cache when terminating session
+
+                Log::info('WhatsApp session terminated successfully', [
+                    'session_id' => $this->sessionId,
+                    'response' => $data
+                ]);
+
+                return [
+                    'success' => true,
+                    'message' => $data['message'] ?? 'Session terminated successfully',
+                    'data' => $data
+                ];
+            }
+
+            Log::error('Failed to terminate WhatsApp session', [
+                'session_id' => $this->sessionId,
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to terminate session',
+                'status' => $response->status(),
+                'details' => $response->body()
+            ];
+        } catch (\Exception $e) {
+            Log::error('Exception while terminating WhatsApp session', [
+                'session_id' => $this->sessionId,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Exception occurred while terminating session',
+                'details' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Get all sessions
+     * GET /session/getSessions
+     */
+    public function getAllSessions(): array
+    {
+        try {
+            Log::info('Getting all WhatsApp sessions');
+
+            $response = $this->makeRequest('get', '/session/getSessions');
+
+            if ($response->successful()) {
+                $data = $response->json();
+
+                Log::info('WhatsApp sessions retrieved successfully', [
+                    'count' => count($data ?? [])
+                ]);
+
+                return [
+                    'success' => true,
+                    'sessions' => $data ?? []
+                ];
+            }
+
+            Log::error('Failed to get WhatsApp sessions', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to get sessions',
+                'status' => $response->status(),
+                'details' => $response->body()
+            ];
+        } catch (\Exception $e) {
+            Log::error('Exception while getting WhatsApp sessions', [
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Exception occurred while getting sessions',
+                'details' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Terminate all inactive sessions
+     * GET /session/terminateInactive
+     */
+    public function terminateInactiveSessions(): array
+    {
+        try {
+            Log::info('Terminating inactive WhatsApp sessions');
+
+            $response = $this->makeRequest('get', '/session/terminateInactive');
+
+            if ($response->successful()) {
+                $data = $response->json();
+                $this->clearSessionCache(); // Clear all session caches
+
+                Log::info('Inactive WhatsApp sessions terminated successfully', [
+                    'response' => $data
+                ]);
+
+                return [
+                    'success' => true,
+                    'message' => $data['message'] ?? 'Inactive sessions terminated',
+                    'data' => $data
+                ];
+            }
+
+            Log::error('Failed to terminate inactive WhatsApp sessions', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to terminate inactive sessions',
+                'status' => $response->status(),
+                'details' => $response->body()
+            ];
+        } catch (\Exception $e) {
+            Log::error('Exception while terminating inactive WhatsApp sessions', [
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Exception occurred while terminating inactive sessions',
+                'details' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Terminate all sessions
+     * GET /session/terminateAll
+     */
+    public function terminateAllSessions(): array
+    {
+        try {
+            Log::info('Terminating all WhatsApp sessions');
+
+            $response = $this->makeRequest('get', '/session/terminateAll');
+
+            if ($response->successful()) {
+                $data = $response->json();
+                $this->clearSessionCache(); // Clear all session caches
+
+                Log::info('All WhatsApp sessions terminated successfully', [
+                    'response' => $data
+                ]);
+
+                return [
+                    'success' => true,
+                    'message' => $data['message'] ?? 'All sessions terminated',
+                    'data' => $data
+                ];
+            }
+
+            Log::error('Failed to terminate all WhatsApp sessions', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to terminate all sessions',
+                'status' => $response->status(),
+                'details' => $response->body()
+            ];
+        } catch (\Exception $e) {
+            Log::error('Exception while terminating all WhatsApp sessions', [
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Exception occurred while terminating all sessions',
                 'details' => $e->getMessage()
             ];
         }
@@ -79,54 +465,51 @@ class WhatsAppService
 
     /**
      * Get session status
+     * 🖼 مرحله ۳ — چک کردن وضعیت سشن
+     * GET /session/status/{sessionId}
      */
     public function getSessionStatus(): array
     {
         try {
+            Log::info('Getting WhatsApp session status', [
+                'session_id' => $this->sessionId,
+                'base_url' => $this->baseUrl
+            ]);
+
             $response = Http::withHeaders([
-                'x-api-key' => $this->apiKey,
+                'X-Api-Key' => $this->apiKey,
                 'Content-Type' => 'application/json'
             ])->get("{$this->baseUrl}/session/status/{$this->sessionId}");
 
             if ($response->successful()) {
                 $data = $response->json();
 
-                // If session not found, try to start it first
-                if (isset($data['message']) && $data['message'] === 'session_not_found') {
-                    Log::info('Session not found, attempting to start session', [
-                        'session_id' => $this->sessionId
-                    ]);
+                // Check if session is connected
+                $isConnected = isset($data['state']) && $data['state'] === 'CONNECTED';
 
-                    $startResult = $this->startSession();
-                    if ($startResult['success']) {
-                        // Wait a moment then try to get status again
-                        sleep(2);
-                        return $this->getSessionStatus();
-                    }
+                Log::info('WhatsApp session status retrieved', [
+                    'session_id' => $this->sessionId,
+                    'state' => $data['state'] ?? 'unknown',
+                    'connected' => $isConnected
+                ]);
 
-                    return $startResult;
-                }
-
-                // If session exists but not connected, return the current status
-                if (isset($data['state']) && $data['state'] !== 'CONNECTED') {
-                    Log::info('WhatsApp session exists but not connected', [
-                        'session_id' => $this->sessionId,
-                        'state' => $data['state']
-                    ]);
-                    return $data;
-                }
-
-                return $data;
+                return [
+                    'success' => true,
+                    'connected' => $isConnected,
+                    'state' => $data['state'] ?? 'unknown',
+                    'data' => $data
+                ];
             }
 
-            // If we get a 404, try to start the session
+            // If session not found (404), try to start it
             if ($response->status() === 404) {
-                Log::info('Session not found (404), attempting to start session', [
+                Log::info('Session not found, attempting to start session', [
                     'session_id' => $this->sessionId
                 ]);
 
                 $startResult = $this->startSession();
                 if ($startResult['success']) {
+                    // Wait a moment then try to get status again
                     sleep(2);
                     return $this->getSessionStatus();
                 }
@@ -134,26 +517,17 @@ class WhatsAppService
                 return $startResult;
             }
 
-            // If session already exists (422), return success since session exists
-            if ($response->status() === 422) {
-                $responseData = $response->json();
-                if (isset($responseData['error']) && strpos($responseData['error'], 'already exists') !== false) {
-                    Log::info('WhatsApp session already exists, which is good', [
-                        'session_id' => $this->sessionId
-                    ]);
-                    return [
-                        'success' => true,
-                        'state' => 'CONNECTED', // Assume connected if session exists
-                        'message' => 'Session already exists'
-                    ];
-                }
-            }
+            Log::error('Failed to get session status', [
+                'session_id' => $this->sessionId,
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
 
             return [
                 'success' => false,
                 'error' => 'Failed to get session status',
                 'status_code' => $response->status(),
-                'body' => $response->body()
+                'details' => $response->body()
             ];
         } catch (\Exception $e) {
             Log::error('Exception while getting WhatsApp session status', [
@@ -171,40 +545,19 @@ class WhatsAppService
 
     /**
      * Get QR code for session authentication
+     * 📷 مرحله ۲ — لاگین کردن سشن (روش اول: QR کد)
+     * GET /session/qr/{sessionId}/image
      */
     public function getQRCode(): array
     {
         try {
+            Log::info('Getting WhatsApp QR code', [
+                'session_id' => $this->sessionId,
+                'base_url' => $this->baseUrl
+            ]);
+
             $response = Http::withHeaders([
-                'x-api-key' => $this->apiKey
-            ])->get("{$this->baseUrl}/session/qr/{$this->sessionId}");
-
-            if ($response->successful()) {
-                return $response->json();
-            }
-
-            return [
-                'success' => false,
-                'error' => 'Failed to get QR code',
-                'status_code' => $response->status()
-            ];
-        } catch (\Exception $e) {
-            return [
-                'success' => false,
-                'error' => 'Exception occurred',
-                'details' => $e->getMessage()
-            ];
-        }
-    }
-
-    /**
-     * Get QR code as image
-     */
-    public function getQRCodeImage(): array
-    {
-        try {
-            $response = Http::withHeaders([
-                'x-api-key' => $this->apiKey
+                'X-Api-Key' => $this->apiKey
             ])->get("{$this->baseUrl}/session/qr/{$this->sessionId}/image");
 
             if ($response->successful()) {
@@ -215,40 +568,7 @@ class WhatsAppService
                 ];
             }
 
-            return [
-                'success' => false,
-                'error' => 'Failed to get QR code image',
-                'status_code' => $response->status()
-            ];
-        } catch (\Exception $e) {
-            return [
-                'success' => false,
-                'error' => 'Exception occurred',
-                'details' => $e->getMessage()
-            ];
-        }
-    }
-
-    /**
-     * Stop WhatsApp session
-     */
-    public function stopSession(): array
-    {
-        try {
-            $response = Http::withHeaders([
-                'x-api-key' => $this->apiKey
-            ])->get("{$this->baseUrl}/session/stop/{$this->sessionId}");
-
-            if ($response->successful()) {
-                $data = $response->json();
-                Log::info('WhatsApp session stopped successfully', [
-                    'session_id' => $this->sessionId,
-                    'response' => $data
-                ]);
-                return $data;
-            }
-
-            Log::error('Failed to stop WhatsApp session', [
+            Log::error('Failed to get QR code', [
                 'session_id' => $this->sessionId,
                 'status' => $response->status(),
                 'body' => $response->body()
@@ -256,36 +576,155 @@ class WhatsAppService
 
             return [
                 'success' => false,
-                'error' => 'Failed to stop session'
+                'error' => 'Failed to get QR code',
+                'status_code' => $response->status(),
+                'details' => $response->body()
             ];
         } catch (\Exception $e) {
-            Log::error('Exception while stopping WhatsApp session', [
+            Log::error('Exception while getting QR code', [
                 'session_id' => $this->sessionId,
                 'error' => $e->getMessage()
             ]);
 
             return [
                 'success' => false,
-                'error' => 'Exception occurred',
+                'error' => 'Exception occurred while getting QR code',
                 'details' => $e->getMessage()
             ];
         }
     }
 
     /**
+     * Request pairing code for session authentication
+     * 📌 روش دوم: Pairing Code (بدون QR)
+     * POST /session/requestPairingCode/{sessionId}
+     */
+    public function requestPairingCode(string $phoneNumber): array
+    {
+        try {
+            Log::info('Requesting WhatsApp pairing code', [
+                'session_id' => $this->sessionId,
+                'phone_number' => $phoneNumber,
+                'base_url' => $this->baseUrl
+            ]);
+
+            $response = Http::withHeaders([
+                'X-Api-Key' => $this->apiKey,
+                'Content-Type' => 'application/json'
+            ])->post("{$this->baseUrl}/session/requestPairingCode/{$this->sessionId}", [
+                'phoneNumber' => $phoneNumber,
+                'showNotification' => true
+            ]);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                Log::info('WhatsApp pairing code requested successfully', [
+                    'session_id' => $this->sessionId,
+                    'response' => $data
+                ]);
+                return [
+                    'success' => true,
+                    'message' => 'Pairing code requested successfully',
+                    'data' => $data
+                ];
+            }
+
+            Log::error('Failed to request pairing code', [
+                'session_id' => $this->sessionId,
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to request pairing code',
+                'status_code' => $response->status(),
+                'details' => $response->body()
+            ];
+        } catch (\Exception $e) {
+            Log::error('Exception while requesting pairing code', [
+                'session_id' => $this->sessionId,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Exception occurred while requesting pairing code',
+                'details' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Get page screenshot for debugging
+     * 🖼 اسکرین‌شات از صفحه واتساپ
+     * GET /session/getPageScreenshot/{sessionId}
+     */
+    public function getPageScreenshot(): array
+    {
+        try {
+            Log::info('Getting WhatsApp page screenshot', [
+                'session_id' => $this->sessionId,
+                'base_url' => $this->baseUrl
+            ]);
+
+            $response = Http::withHeaders([
+                'X-Api-Key' => $this->apiKey
+            ])->get("{$this->baseUrl}/session/getPageScreenshot/{$this->sessionId}");
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'image_data' => base64_encode($response->body()),
+                    'content_type' => 'image/png'
+                ];
+            }
+
+            Log::error('Failed to get page screenshot', [
+                'session_id' => $this->sessionId,
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to get page screenshot',
+                'status_code' => $response->status(),
+                'details' => $response->body()
+            ];
+        } catch (\Exception $e) {
+            Log::error('Exception while getting page screenshot', [
+                'session_id' => $this->sessionId,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Exception occurred while getting page screenshot',
+                'details' => $e->getMessage()
+            ];
+        }
+    }
+
+
+    /**
      * Send OTP message via WhatsApp
+     * POST /client/sendMessage/{sessionId}
+     * According to API docs: Send a message to a specific chatId
      */
     public function sendOtp(string $phoneNumber, string $otpCode): array
     {
         try {
-            // Ensure phone number is in correct format (without +)
+            // Ensure phone number is in correct format (international without +)
+            // API docs: شماره باید بین‌المللی بدون + باشه (مثلاً: 98...)
             $cleanPhone = preg_replace('/[^0-9]/', '', $phoneNumber);
 
-            // Validate API key and URL
-            if (empty($this->apiKey) || $this->apiKey === 'your_whatsapp_api_key_here') {
+            // Validate API key
+            if (empty($this->apiKey) || $this->apiKey !== 'whatsappplus') {
                 Log::error('WhatsApp API key not properly configured', [
                     'phone' => $phoneNumber,
-                    'session_id' => $this->sessionId
+                    'session_id' => $this->sessionId,
+                    'api_key' => $this->apiKey ? 'configured' : 'empty'
                 ]);
                 return [
                     'success' => false,
@@ -293,40 +732,56 @@ class WhatsAppService
                 ];
             }
 
-            // Check session status first
+            // Check session status first - use cached status for performance
+            $cachedStatus = $this->getCachedSessionStatus();
+            if ($cachedStatus && isset($cachedStatus['connected']) && !$cachedStatus['connected']) {
+                Log::info('Using cached session status - session not connected', [
+                    'phone' => $phoneNumber,
+                    'session_id' => $this->sessionId,
+                    'cached_status' => $cachedStatus
+                ]);
+                return [
+                    'success' => false,
+                    'error' => 'WhatsApp session not connected (cached)',
+                    'details' => $cachedStatus
+                ];
+            }
+
+            // Get fresh status if not cached or if cached status is old
             $status = $this->getSessionStatus();
-            if (!$status['success']) {
-                Log::error('WhatsApp session not available for OTP sending', [
+            $this->cacheSessionStatus($status); // Cache the status
+
+            if (!$status['success'] || !$status['connected']) {
+                Log::error('WhatsApp session not connected for OTP sending', [
                     'phone' => $phoneNumber,
                     'session_id' => $this->sessionId,
                     'status' => $status
                 ]);
                 return [
                     'success' => false,
-                    'error' => 'WhatsApp session not available',
+                    'error' => 'WhatsApp session not connected',
                     'details' => $status
                 ];
             }
 
             $message = "Your TrustStake OTP code is: {$otpCode}. This code will expire in 5 minutes.";
 
+            // API docs: chatId باید به فرمت بین‌المللی بدون + باشه و آخرش @c.us
+            $chatId = "{$cleanPhone}@c.us";
+
             Log::info('WhatsApp OTP sending attempt', [
                 'phone' => $phoneNumber,
                 'clean_phone' => $cleanPhone,
+                'chat_id' => $chatId,
                 'session_id' => $this->sessionId,
-                'base_url' => $this->baseUrl,
-                'api_key_configured' => !empty($this->apiKey)
+                'base_url' => $this->baseUrl
             ]);
 
-            $response = Http::timeout(30)
-                ->withHeaders([
-                    'x-api-key' => $this->apiKey,
-                    'Content-Type' => 'application/json'
-                ])->post("{$this->baseUrl}/client/sendMessage/{$this->sessionId}", [
-                    'chatId' => "{$cleanPhone}@c.us",
-                    'contentType' => 'string',
-                    'content' => $message
-                ]);
+            // Use correct endpoint: /client/sendMessage/{sessionId}
+            $response = $this->makeRequest('post', "/client/sendMessage/{$this->sessionId}", [
+                'chatId' => $chatId,
+                'message' => $message
+            ]);
 
             Log::info('WhatsApp API response received', [
                 'phone' => $phoneNumber,
@@ -342,29 +797,27 @@ class WhatsAppService
                     'session_id' => $this->sessionId,
                     'response_data' => $data
                 ]);
-                return $data;
+                return [
+                    'success' => true,
+                    'message' => 'OTP sent successfully',
+                    'data' => $data
+                ];
             }
 
             // Handle specific error cases
             if ($response->status() === 404) {
-                $errorBody = $response->json();
-                if (isset($errorBody['error']) && $errorBody['error'] === 'session_not_connected') {
-                    Log::error('WhatsApp session not connected', [
-                        'phone' => $phoneNumber,
-                        'session_id' => $this->sessionId,
-                        'response' => $errorBody
-                    ]);
+                Log::error('WhatsApp session not found or not connected', [
+                    'phone' => $phoneNumber,
+                    'session_id' => $this->sessionId,
+                    'response_body' => $response->body()
+                ]);
 
-                    // Try to reinitialize session
-                    $this->initializeSession();
-
-                    return [
-                        'success' => false,
-                        'error' => 'WhatsApp session not connected',
-                        'retry_possible' => true,
-                        'details' => $errorBody
-                    ];
-                }
+                return [
+                    'success' => false,
+                    'error' => 'WhatsApp session not connected',
+                    'status' => $response->status(),
+                    'details' => $response->body()
+                ];
             }
 
             // Log the failure with full details
@@ -426,72 +879,73 @@ class WhatsAppService
 
     /**
      * Initialize WhatsApp session if not ready
+     * Complete flow: Start session → Wait for user to scan QR/pair → Check status
      */
     public function initializeSession(): array
     {
         try {
-            Log::info('Initializing WhatsApp session', ['session_id' => $this->sessionId]);
+            Log::info('Initializing WhatsApp session', [
+                'session_id' => $this->sessionId,
+                'base_url' => $this->baseUrl
+            ]);
 
-            // First check if session already exists and is working
+            // Step 1: Check if session already exists and is connected
             $status = $this->getSessionStatus();
 
-            if ($status['success']) {
-                Log::info('WhatsApp session already initialized', [
+            if ($status['success'] && $status['connected']) {
+                Log::info('WhatsApp session already connected', [
                     'session_id' => $this->sessionId,
-                    'status' => $status
+                    'state' => $status['state']
                 ]);
-                return ['success' => true, 'message' => 'Session already initialized'];
+                return [
+                    'success' => true,
+                    'message' => 'Session already connected',
+                    'status' => $status
+                ];
             }
 
-            // If session doesn't exist, try to start it
-            if (isset($status['error']) && strpos($status['error'], 'session_not_found') !== false) {
-                Log::info('WhatsApp session not found, starting new session', [
+            // Step 2: Start a new session if it doesn't exist
+            if (!$status['success']) {
+                Log::info('Session not found, starting new session', [
                     'session_id' => $this->sessionId
                 ]);
 
                 $startResult = $this->startSession();
-                if ($startResult['success']) {
-                    // Wait for session to be ready
-                    sleep(3);
-
-                    // Check status again after starting
-                    $newStatus = $this->getSessionStatus();
-                    if ($newStatus['success']) {
-                        Log::info('WhatsApp session started successfully', [
-                            'session_id' => $this->sessionId
-                        ]);
-                        return ['success' => true, 'message' => 'Session started successfully'];
-                    } else {
-                        Log::warning('WhatsApp session started but status check failed', [
-                            'session_id' => $this->sessionId,
-                            'start_result' => $startResult,
-                            'status_result' => $newStatus
-                        ]);
-                        return [
-                            'success' => false,
-                            'message' => 'Session started but not ready',
-                            'details' => $newStatus
-                        ];
-                    }
-                } else {
+                if (!$startResult['success']) {
                     Log::error('Failed to start WhatsApp session', [
                         'session_id' => $this->sessionId,
                         'result' => $startResult
                     ]);
-                    return $startResult;
+                    return [
+                        'success' => false,
+                        'message' => 'Failed to start session',
+                        'details' => $startResult
+                    ];
                 }
+
+                Log::info('WhatsApp session started, waiting for user authentication', [
+                    'session_id' => $this->sessionId
+                ]);
+
+                return [
+                    'success' => true,
+                    'message' => 'Session started, waiting for user authentication',
+                    'needs_auth' => true,
+                    'start_result' => $startResult
+                ];
             }
 
-            // Session exists but has issues
-            Log::warning('WhatsApp session exists but has issues', [
+            // Step 3: Session exists but not connected - needs user authentication
+            Log::info('WhatsApp session exists but not connected', [
                 'session_id' => $this->sessionId,
-                'status' => $status
+                'state' => $status['state']
             ]);
 
             return [
-                'success' => false,
-                'message' => 'Session exists but not working properly',
-                'details' => $status
+                'success' => true,
+                'message' => 'Session exists, waiting for user authentication',
+                'needs_auth' => true,
+                'status' => $status
             ];
 
         } catch (\Exception $e) {
